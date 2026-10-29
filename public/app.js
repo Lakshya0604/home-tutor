@@ -179,7 +179,8 @@ function showBoard(d, upTo) {
 }
 function addBoard(t, step) {
   const e = document.createElement('div'); e.className = 'item';
-  if (t) { const m = document.createElement('div'); m.textContent = t; e.appendChild(m); }
+  const norm = x => String(x || '').replace(/[\s*]/g, '').toLowerCase();
+  if (t && !(step && step.math && norm(t) === norm(step.math))) { const m = document.createElement('div'); m.textContent = t; e.appendChild(m); }
   if (step && step.math) {
     const k = document.createElement('div'); k.className = 'step'; k.textContent = String(step.math).slice(0, 160); e.appendChild(k);
     if (step.from) { const f = document.createElement('div'); f.className = 'from'; f.textContent = 'from: ' + String(step.from).slice(0, 120); e.appendChild(f); }
