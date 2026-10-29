@@ -60,10 +60,20 @@ export function playBlob(blob, rate, onLevel) {
 }
 export function stopAudio() { if (audioEl) { audioEl.pause(); } window.speechSynthesis?.cancel?.(); }
 export function speakDevice(text, voiceURI, lang, rate) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
+    if (!window.speechSynthesis) return reject(new Error('This browser has no speech synthesis. Open Home Tutor in Microsoft Edge or Chrome on a computer.'));
     const u = new SpeechSynthesisUtterance(text);
     const v = deviceVoices().find(v => v.voiceURI === voiceURI); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = lang;
-    u.rate = rate; u.onend = u.onerror = () => resolve();
+    u.rate = rate;
+    // Natural online voices can take a few seconds to start; if nothing starts in 20s treat it as a failure instead of hanging or skipping.
+    const timer = setTimeout(() => { speechSynthesis.cancel(); reject(new Error('The voice did not start speaking. Pick another voice, check your internet connection (natural voices are online), then press Resume.')); }, 20000);
+    u.onstart = () => clearTimeout(timer);
+    u.onend = () => { clearTimeout(timer); resolve(); };
+    u.onerror = e => {
+      clearTimeout(timer);
+      if (e && (e.error === 'canceled' || e.error === 'interrupted')) return resolve(); // we stopped it ourselves (Pause / new lesson)
+      reject(new Error('The voice failed (' + ((e && e.error) || 'unknown') + '). Pick another voice or check your internet connection, then press Resume.'));
+    };
     speechSynthesis.speak(u);
   });
 }
