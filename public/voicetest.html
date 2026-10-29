@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Tutor - voice test</title><link rel="stylesheet" href="style.css"></head>
+<body style="height:auto">
+<header><div class="brand">🎓 Home Tutor <span class="tag">voice test</span></div><div class="hdr-right"><a href="index.html" class="note" style="align-self:center">Back to Home Tutor</a></div></header>
+<main style="display:block;max-width:640px;margin:0 auto">
+  <div id="chat" style="gap:10px">
+    <p class="note">This page only plays a short sample with the voices already inside your browser. It needs no login, sends nothing to any server and saves nothing.</p>
+    <label>Language <select id="lang"><option value="hinglish">Hinglish (Hindi voice)</option><option value="hindi">Hindi</option><option value="english">English</option></select></label>
+    <label>Voice <select id="voice"></select></label>
+    <label>Speed <select id="rate"><option value="0.75">Slow</option><option value="0.9" selected>Normal-slow</option><option value="1.05">Normal</option></select></label>
+    <div class="row"><button id="go" class="primary">🔊 Preview</button><span id="st" class="note"></span></div>
+    <div id="count" class="note"></div>
+  </div>
+</main>
+<script type="module" src="voicetest.js"></script>
+</body></html>
