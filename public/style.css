@@ -38,5 +38,6 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid #33416b;border-r
 dialog label{display:block;margin:8px 0}dialog input,dialog select{width:100%;margin-top:3px}
 dialog::backdrop{background:#000a}
 main>*{min-width:0}
+[hidden]{display:none!important}
 @media(max-width:900px){main{grid-template-columns:1fr;overflow:auto}body{height:auto}}
-@media(max-width:640px){header{flex-wrap:wrap;gap:6px;padding:8px 10px}.hdr-right{flex-wrap:wrap}.hdr-right>*{flex:1 1 120px;min-width:0}main{padding:8px}#stage{grid-template-columns:1fr}#teacher{max-width:170px}#teacherWrap{padding:6px}#boardWrap{min-height:160px}#board{font-size:16px}.msg{max-width:100%}html,body{max-width:100vw;overflow-x:hidden}}
+@media(max-width:640px){header{display:block;padding:8px 10px}.hdr-right{display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:6px}.hdr-right>*{flex:1 1 100px;min-width:0;max-width:100%}.hdr-right #who{flex:0 1 auto}main{padding:8px}#stage{grid-template-columns:1fr}#teacher{max-width:170px}#teacherWrap{padding:6px}#boardWrap{min-height:160px}#board{font-size:16px}.msg{max-width:100%}html,body{max-width:100vw;overflow-x:hidden}}
