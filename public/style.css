@@ -39,5 +39,7 @@ dialog label{display:block;margin:8px 0}dialog input,dialog select{width:100%;ma
 dialog::backdrop{background:#000a}
 main>*{min-width:0}
 [hidden]{display:none!important}
+@media(max-width:1180px){header{flex-wrap:wrap;gap:8px}.brand{white-space:nowrap}.hdr-right{flex-wrap:wrap;flex:1 1 420px;justify-content:flex-end;min-width:0}.hdr-right #voice{flex:1 1 220px;min-width:0;max-width:100%}}
+@media(pointer:coarse){button,select,.file{min-height:40px}}
 @media(max-width:900px){main{grid-template-columns:1fr;overflow:auto}body{height:auto}}
 @media(max-width:640px){header{display:block;padding:8px 10px}.hdr-right{display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:6px}.hdr-right>*{flex:1 1 100px;min-width:0;max-width:100%}.hdr-right #who{flex:0 1 auto}main{padding:8px}#stage{grid-template-columns:1fr}#teacher{max-width:170px}#teacherWrap{padding:6px}#boardWrap{min-height:160px}#board{font-size:16px}.msg{max-width:100%}html,body{max-width:100vw;overflow-x:hidden}}
