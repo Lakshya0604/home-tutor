@@ -3,7 +3,7 @@ import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chatJSON } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
-import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt } from './prompts.js';
+import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
@@ -48,7 +48,7 @@ $('voice').onchange = () => localStorage.setItem('aiteacher.voice.' + voiceGroup
 $('lang').onchange = () => { fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
 speechSynthesis?.addEventListener?.('voiceschanged', fillVoices);
 if (localStorage.getItem('aiteacher.lang')) $('lang').value = localStorage.getItem('aiteacher.lang');
-if (localStorage.getItem('aiteacher.rate')) $('rate').value = localStorage.getItem('aiteacher.rate');
+{ const r = localStorage.getItem('aiteacher.rate'); if (r && [...$('rate').options].some(o => o.value === r)) $('rate').value = r; }
 $('rate').onchange = () => localStorage.setItem('aiteacher.rate', $('rate').value);
 fillVoices();
 
@@ -132,13 +132,31 @@ function chunkText(t) {
   if (cur) out.push(cur); return out;
 }
 
+// ---------- topics ----------
+const topicOf = i => (S.topics || []).find(t => i >= t.from && i <= t.to);
+async function planTopics() {
+  const n = S.chunks.length, full = S.source.length <= 9000;
+  const digest = full ? S.chunks.map((c, i) => `[PART ${i}]\n${c}`).join('\n\n') : S.chunks.map((c, i) => `[PART ${i}] ${c.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n');
+  let topics = null;
+  try {
+    const o = await chatJSON(outlinePrompt(lang(), digest.slice(0, 12000), n, full));
+    const t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: +x.from, to: +x.to }));
+    let ok = t.length > 0 && t[0].from === 0 && t[t.length - 1].to === n - 1;
+    for (let k = 1; ok && k < t.length; k++) if (t[k].from !== t[k - 1].to + 1) ok = false;
+    if (ok && t.every(x => x.title && x.to >= x.from)) topics = t;
+  } catch { /* fall back below */ }
+  if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
+  S.topics = topics; S.planFull = full;
+  say('s', `Read all ${n} parts${full ? '' : ' (topic plan made from the opening lines of each part; every part is still taught from its full text)'}. Topics: ` + topics.map((t, i) => `${i + 1}. ${t.title}`).join('  |  '));
+}
+
 // ---------- lesson ----------
 function loadChunk(i) {
   if (i >= S.chunks.length) return null;
   if (!S.data[i]) {
-    S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4))).then(d => {
+    S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4), topicOf(i)?.title)).then(d => {
       if (!Array.isArray(d.sentences) || !d.sentences.length) throw new Error('AI returned no lesson');
-      d.sentences = d.sentences.filter(s => s && s.text).slice(0, 14); return d;
+      d.sentences = d.sentences.filter(s => s && s.text).slice(0, 16); return d;
     });
     S.data[i].catch(() => { S.data[i] = null; });
   }
@@ -146,18 +164,27 @@ function loadChunk(i) {
 }
 function showBoard(d, upTo) {
   $('board').innerHTML = ''; $('boardTitle').textContent = d.title || 'Board';
-  d.sentences.slice(0, upTo + 1).forEach((s, k) => { if (s.board && S.shown.has(k)) addBoard(s.board); });
+  d.sentences.slice(0, upTo + 1).forEach((s, k) => { if ((s.board || s.step) && S.shown.has(k)) addBoard(s.board, s.step); });
   renderDiagram($('diagram'), S.shown.has('dia') ? d.diagram : null);
 }
-function addBoard(t) { const e = document.createElement('div'); e.className = 'item'; e.textContent = t; $('board').appendChild(e); $('board').scrollTop = 1e9; }
+function addBoard(t, step) {
+  const e = document.createElement('div'); e.className = 'item';
+  if (t) { const m = document.createElement('div'); m.textContent = t; e.appendChild(m); }
+  if (step && step.math) {
+    const k = document.createElement('div'); k.className = 'step'; k.textContent = String(step.math).slice(0, 160); e.appendChild(k);
+    if (step.from) { const f = document.createElement('div'); f.className = 'from'; f.textContent = 'from: ' + String(step.from).slice(0, 120); e.appendChild(f); }
+  }
+  $('board').appendChild(e); $('board').scrollTop = 1e9;
+}
 function setControls() {
   $('btnPause').disabled = !S.playing; $('btnResume').disabled = S.playing || !S.started || S.finished;
-  $('btnDoubt').disabled = !S.started || S.busy; $('btnTest').disabled = !S.testReady;
+  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? '▶ Next topic' : '▶ Resume'; $('btnTest').disabled = !S.testReady;
   $('progress').textContent = S.started ? `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}` : '';
 }
 async function runLesson() {
-  const token = ++S.run; S.playing = true; setControls();
+  const token = ++S.run; S.playing = true; S.topicPause = false; setControls();
   try {
+    if (!S.topics) { status('Reading the whole material…'); await planTopics(); if (token !== S.run) return; }
     while (S.idx < S.chunks.length) {
       status('Preparing lesson part ' + (S.idx + 1) + '…');
       const d = await loadChunk(S.idx);
@@ -169,7 +196,7 @@ async function runLesson() {
         if (token !== S.run) return;
         const s = d.sentences[S.sent];
         teacher.gesture(['explain', 'point', 'wave', 'think', 'nod'].includes(s.gesture) ? s.gesture : 'explain');
-        if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board) addBoard(s.board); }
+        if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(s.board, s.step); }
         if (S.sent === d.sentences.length - 1 && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = s.speak && lang() === 'hinglish' ? s.speak : s.text;
         say('t', s.text);
@@ -177,7 +204,14 @@ async function runLesson() {
         if (token !== S.run) return;
         persist(S.sent + 1);
       }
-      S.idx++; S.sent = 0; setControls(); persist(0);
+      S.idx++; S.sent = 0; persist(0);
+      const tp = topicOf(S.idx - 1);
+      if (tp && S.idx > tp.to && S.idx < S.chunks.length) {
+        S.playing = false; S.topicPause = true; teacher.gesture('rest'); status('Topic finished - paused'); setControls();
+        say('s', `Topic "${tp.title}" is finished. Ask any doubt (type or by voice), then press Next topic.`);
+        return;
+      }
+      setControls();
     }
     S.playing = false; S.finished = true; S.testReady = true; teacher.gesture('wave'); status('Lesson finished'); setControls(); persist(0, true);
     say('s', 'Lesson finished. Press "Unit test" when ready.');
@@ -195,7 +229,7 @@ $('btnStart').onclick = () => {
   if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
   stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
-  Object.assign(S, { source: capped, chunks: chunkText(capped), data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, lessonId: undefined, title0: '' });
+  Object.assign(S, { source: capped, chunks: chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, lessonId: undefined, title0: '' });
   $('log').innerHTML = ''; $('board').innerHTML = ''; $('diagram').innerHTML = '';
   say('s', `Loaded ${capped.length} characters in ${S.chunks.length} parts. Teaching in ${$('lang').selectedOptions[0].textContent}, voice: ${$('voice').selectedOptions[0]?.textContent || 'none'}.`);
   runLesson();
@@ -213,22 +247,28 @@ $('btnAsk').onclick = async () => {
     S.playing = true; const tok = ++S.run; setControls();
     for (const s of sents) {
       if (tok !== S.run) break;
-      teacher.gesture(s.gesture || 'explain'); if (s.board) addBoard(s.board); say('t', s.text);
+      teacher.gesture(s.gesture || 'explain'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
       await speakText(s.speak && lang() === 'hinglish' ? s.speak : s.text);
     }
     if (tok === S.run) { S.playing = false; teacher.gesture('rest'); }
-    const cd = await S.data[S.idx]?.catch(() => null); if (cd) showBoard(cd, S.sent);
+    const cd = S.topicPause ? null : await S.data[S.idx]?.catch(() => null); if (cd) showBoard(cd, S.sent);
     say('s', 'Doubt answered. Press Resume to continue the lesson, or ask another doubt.');
   } catch (e) { say('s warn', 'Could not answer: ' + e.message); }
   S.busy = false; S.playing = false; setControls(); status('Paused');
 };
 $('doubtInput').onkeydown = e => { if (e.key === 'Enter') $('btnAsk').click(); };
-$('btnMic').onclick = () => {
+function listen() {
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!R) { say('s warn', 'Voice input is not supported in this browser. Type your doubt instead.'); return; }
-  const r = new R(); r.lang = lang() === 'english' ? 'en-IN' : 'hi-IN'; r.onresult = e => { $('doubtInput').value = e.results[0][0].transcript; };
-  r.onerror = e => say('s warn', 'Mic error: ' + e.error); r.start(); status('Listening…');
-};
+  if (!R) { say('s warn', 'Voice input is not supported in this browser (Chrome or Edge on a computer work best). Type your doubt instead.'); $('doubtBox').hidden = false; return; }
+  if (S.playing) $('btnPause').click(); else { stopAudio(); }
+  $('doubtBox').hidden = false;
+  const r = new R(); r.lang = lang() === 'english' ? 'en-IN' : 'hi-IN'; r.interimResults = false; let got = false;
+  r.onresult = e => { got = true; const t = e.results[0][0].transcript; $('doubtInput').value = t; status('Heard: ' + t.slice(0, 60)); $('btnAsk').click(); };
+  r.onerror = e => say('s warn', 'Mic problem: ' + e.error + (e.error === 'not-allowed' ? ' (allow the microphone for this site, or type your doubt)' : '') + '. You can type your doubt instead.');
+  r.onend = () => { if (!got && !S.busy) { status('Paused'); } };
+  try { r.start(); status('Listening… ask your doubt'); say('s', 'Paused. Listening - speak your doubt now.'); } catch (err) { say('s warn', 'Could not start the mic: ' + err.message); }
+}
+$('btnMic').onclick = listen; $('btnVoiceAsk').onclick = listen;
 
 // ---------- unit test ----------
 $('btnTest').onclick = async () => {
@@ -276,7 +316,7 @@ requireLogin().then(async u => {
       b.onclick = async () => {
         const f = await getLesson(l._id); stopAudio(); S.run++;
         $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
-        Object.assign(S, { source: f.source, chunks: chunkText(f.source), data: [], idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
+        Object.assign(S, { source: f.source, chunks: chunkText(f.source), topics: null, topicPause: false, data: [], idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
         $('board').innerHTML = ''; $('diagram').innerHTML = '';
         say('s', `Resuming "${f.title}" at part ${f.chunkIndex + 1}, line ${f.sentIndex + 1}.`);
         if (f.finished) { setControls(); status('Lesson finished'); } else runLesson();
