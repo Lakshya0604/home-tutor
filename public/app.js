@@ -2,6 +2,7 @@ import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chatJSON } from './llm.js';
+import { saveProgress, listLessons, getLesson } from './progress.js';
 import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
@@ -12,6 +13,14 @@ const lang = () => $('lang').value;
 const rate = () => parseFloat($('rate').value);
 const status = t => { $('status').textContent = t; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let saveBusy = false;
+async function persist(nextSent, finished) {
+  if (!S.source || saveBusy) return; saveBusy = true;
+  try {
+    const j = await saveProgress({ id: S.lessonId, title: S.title0 || S.source.slice(0, 60), lang: lang(), source: S.source, chunkIndex: S.idx, sentIndex: nextSent ?? S.sent, finished: !!finished });
+    if (j.id) S.lessonId = j.id;
+  } catch { /* progress saving is best effort */ } finally { saveBusy = false; }
+}
 
 // ---------- chat log ----------
 function say(cls, text) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = 1e9; return d; }
@@ -137,7 +146,7 @@ async function runLesson() {
       const d = await loadChunk(S.idx);
       if (token !== S.run) return;
       loadChunk(S.idx + 1)?.catch(() => {});
-      if (S.sent === 0) { S.shown = new Set(); S.titles.push(d.title || ''); }
+      if (S.sent === 0) { S.shown = new Set(); S.titles.push(d.title || ''); if (!S.title0 && d.title) S.title0 = d.title; }
       showBoard(d, S.sent);
       for (; S.sent < d.sentences.length; S.sent++) {
         if (token !== S.run) return;
@@ -149,10 +158,11 @@ async function runLesson() {
         say('t', s.text);
         await speakText(tx);
         if (token !== S.run) return;
+        persist(S.sent + 1);
       }
-      S.idx++; S.sent = 0; setControls();
+      S.idx++; S.sent = 0; setControls(); persist(0);
     }
-    S.playing = false; S.finished = true; S.testReady = true; teacher.gesture('wave'); status('Lesson finished'); setControls();
+    S.playing = false; S.finished = true; S.testReady = true; teacher.gesture('wave'); status('Lesson finished'); setControls(); persist(0, true);
     say('s', 'Lesson finished. Press "Unit test" when ready.');
     await sleep(1500); teacher.gesture('rest');
   } catch (e) {
@@ -166,7 +176,7 @@ $('btnStart').onclick = () => {
   if (t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
   stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
-  Object.assign(S, { source: capped, chunks: chunkText(capped), data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null });
+  Object.assign(S, { source: capped, chunks: chunkText(capped), data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, lessonId: undefined, title0: '' });
   $('log').innerHTML = ''; $('board').innerHTML = ''; $('diagram').innerHTML = '';
   say('s', `Loaded ${capped.length} characters in ${S.chunks.length} parts. Teaching in ${$('lang').selectedOptions[0].textContent}, voice: ${$('voice').selectedOptions[0]?.textContent || 'none'}.`);
   runLesson();
@@ -236,5 +246,24 @@ setControls();
 window.__app = { S, teacher };
 
 // ---------- account ----------
-requireLogin().then(u => { $('who').textContent = u.name || u.email; });
+requireLogin().then(async u => {
+  $('who').textContent = u.name || u.email;
+  try {
+    const ls = (await listLessons()).slice(0, 5); if (!ls.length) return;
+    say('s', 'Your saved lessons (continue from where you stopped):');
+    for (const l of ls) {
+      const b = document.createElement('button'); b.className = 'msg s'; b.style.cursor = 'pointer';
+      b.textContent = (l.finished ? '✔ ' : '▶ ') + (l.title || 'Untitled') + (l.finished ? ' (finished)' : ` (part ${l.chunkIndex + 1}, line ${l.sentIndex + 1})`);
+      b.onclick = async () => {
+        const f = await getLesson(l._id); stopAudio(); S.run++;
+        $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
+        Object.assign(S, { source: f.source, chunks: chunkText(f.source), data: [], idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
+        $('board').innerHTML = ''; $('diagram').innerHTML = '';
+        say('s', `Resuming "${f.title}" at part ${f.chunkIndex + 1}, line ${f.sentIndex + 1}.`);
+        if (f.finished) { setControls(); status('Lesson finished'); } else runLesson();
+      };
+      $('log').appendChild(b);
+    }
+  } catch { /* offline or server waking: skip */ }
+});
 $('btnLogout').onclick = logout;
