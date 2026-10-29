@@ -31,7 +31,7 @@ export async function createTeacher3D(host, modelUrl) {
   const bones = { ruA: B('rightUpperArm'), luA: B('leftUpperArm'), rlA: B('rightLowerArm'), llA: B('leftLowerArm'), head: B('head'), neck: B('neck'), spine: B('spine'), chest: B('chest'), rH: B('rightHand'), lH: B('leftHand') };
   // frame the upper body
   const hb = B('head').getWorldPosition(new THREE.Vector3());
-  camera.position.set(0, hb.y - 0.14, 2.6); camera.lookAt(0, hb.y - 0.4, 0);
+  camera.position.set(0, hb.y - 0.02, 2.7); camera.lookAt(0, hb.y - 0.3, 0);
   let gest = 'rest', speaking = false, ext = null, mouth = 0, mouthT = 0, lastPulse = 0, nextBlink = 1500, blink = -1;
   const cur = { r: [...POSE.rest.r], l: [...POSE.rest.l] };
   const clock = new THREE.Clock();
