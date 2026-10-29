@@ -1,7 +1,8 @@
 import express from 'express'; import cors from 'cors'; import helmet from 'helmet'; import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose'; import bcrypt from 'bcryptjs'; import jwt from 'jsonwebtoken';
-const { PORT = 8080, MONGODB_URI, JWT_SECRET, GROQ_API_KEY, GROQ_MODEL = 'llama-3.3-70b-versatile', ALLOWED_ORIGIN } = process.env;
-if (!MONGODB_URI || !JWT_SECRET) { console.error('MONGODB_URI and JWT_SECRET are required'); process.exit(1); }
+const { PORT = 8080, MONGODB_URI: URI_ENV, MONGODB_HOST, MONGODB_USER, MONGODB_PASS, JWT_SECRET, GROQ_API_KEY, GROQ_MODEL = 'llama-3.3-70b-versatile', ALLOWED_ORIGIN } = process.env;
+const MONGODB_URI = URI_ENV || `mongodb+srv://${encodeURIComponent(MONGODB_USER)}:${encodeURIComponent(MONGODB_PASS)}@${MONGODB_HOST}/hometutor?retryWrites=true&w=majority`;
+if (!JWT_SECRET || (!URI_ENV && !(MONGODB_HOST && MONGODB_USER && MONGODB_PASS))) { console.error('JWT_SECRET and DB settings are required'); process.exit(1); }
 await mongoose.connect(MONGODB_URI);
 const User = mongoose.model('User', new mongoose.Schema({ name: String, email: { type: String, unique: true, lowercase: true, trim: true }, hash: String, createdAt: { type: Date, default: Date.now } }));
 const Lesson = mongoose.model('Lesson', new mongoose.Schema({ user: { type: mongoose.Schema.Types.ObjectId, index: true }, title: String, lang: String, source: String, chunkIndex: Number, sentIndex: Number, finished: Boolean, score: String, updatedAt: { type: Date, default: Date.now } }));
