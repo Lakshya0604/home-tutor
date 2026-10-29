@@ -89,15 +89,30 @@ async function readPdf(file) {
   let text = '';
   const pages = Math.min(doc.numPages, 60);
   for (let i = 1; i <= pages; i++) { const c = await (await doc.getPage(i)).getTextContent(); text += c.items.map(x => x.str).join(' ') + '\n\n'; }
-  return { text, pages, total: doc.numPages };
+  let ocr = false;
+  if (text.replace(/\s/g, '').length < 200) { // scanned PDF: free in-browser OCR (Tesseract, Hindi + English), first 12 pages
+    ocr = true; text = '';
+    const { createWorker } = (await import('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js')).default;
+    const w = await createWorker('hin+eng');
+    const n = Math.min(doc.numPages, 12);
+    for (let i = 1; i <= n; i++) {
+      $('srcInfo').textContent = `Scanned PDF: running OCR on page ${i} of ${n} (first run downloads the language data)…`;
+      const pg = await doc.getPage(i), vp = pg.getViewport({ scale: 2 }), cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      text += (await w.recognize(cv)).data.text + '\n\n';
+    }
+    await w.terminate();
+    return { text, pages: n, total: doc.numPages, ocr };
+  }
+  return { text, pages, total: doc.numPages, ocr };
 }
 $('pdf').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   $('srcInfo').textContent = 'Reading PDF…';
   try {
     const r = await readPdf(f);
-    if (r.text.replace(/\s/g, '').length < 200) { $('srcInfo').textContent = 'This PDF has almost no selectable text (probably scanned). OCR is not built into this version - paste the text instead.'; return; }
-    $('src').value = r.text.trim(); $('srcInfo').textContent = `PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
+    if (r.text.replace(/\s/g, '').length < (r.ocr ? 20 : 200)) { $('srcInfo').textContent = 'No text could be read from this PDF, even with OCR. Paste the text instead.'; return; }
+    $('src').value = r.text.trim(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
   } catch (err) { $('srcInfo').textContent = 'Could not read PDF: ' + err.message; }
 };
 $('btnVideo').onclick = () => {
