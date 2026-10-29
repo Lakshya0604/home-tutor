@@ -5,7 +5,7 @@ import { API_BASE } from './config.js';
 import { token, logout } from './auth.js';
 const DEFAULTS = {
   server: { base: API_BASE + '/api/llm', model: '(server default)', key: false },
-  groq: { base: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', key: true },
+  groq: { base: 'https://api.groq.com/openai/v1/chat/completions', model: 'openai/gpt-oss-120b', key: true },
   gemini: { base: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.5-flash', key: true },
   custom: { base: '', model: '', key: true },
 };
