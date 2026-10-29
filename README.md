@@ -11,7 +11,10 @@ Pause, ask doubts, resume from the same line, then take an end-of-unit test with
 
 ## Notes and limits
 - The Render free service sleeps after 15 minutes idle. The first login or AI request after that can take about a minute.
-- Scanned PDFs need OCR (not built in). Video URLs cannot be fetched reliably from a browser: paste the transcript.
+- Scanned PDFs: in-browser OCR (Tesseract.js from jsDelivr, Hindi + English, first 12 pages). OCR output can contain mistakes, so check the text before starting. Video URLs cannot be fetched reliably from a browser: paste the transcript.
 - Voices: natural browser/device voices are listed first when the browser has them (e.g. Edge "Online (Natural)"). In-browser Piper voices are a labelled, flatter fallback and are never chosen automatically.
 - Lesson progress is saved to your account after each line, so you can continue after reload or logout.
 - Text over 60,000 characters is cut to the first 60,000.
+
+## Voice licences
+Piper voices come from https://huggingface.co/rhasspy/piper-voices. Several are CC BY-NC-SA 4.0 (non-commercial, attribution, share-alike): Priyamvada, Pratham, HFC Female, Ryan. Kristin is public domain. Check each voice's MODEL_CARD before any commercial use. Rohan, Amy and Lessac were removed from the list until their licences are reviewed.
