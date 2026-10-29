@@ -35,7 +35,7 @@ app.post('/api/llm', auth, llmLimit, async (q, r) => {
   const body = { model: GROQ_MODEL, messages, temperature }; if (json) body.response_format = { type: 'json_object' };
   try {
     const x = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_API_KEY }, body: JSON.stringify(body) });
-    const t = await x.text(); if (!x.ok) return r.status(x.status === 429 ? 429 : 502).json({ error: x.status === 429 ? 'AI free limit reached, try again in a minute' : 'AI provider error' });
+    const t = await x.text(); if (!x.ok) console.error('groq', x.status, t.slice(0, 300)); if (!x.ok) return r.status(x.status === 429 ? 429 : 502).json({ error: x.status === 429 ? 'AI free limit reached, try again in a minute' : 'AI provider error' });
     r.type('json').send(t);
   } catch { r.status(502).json({ error: 'AI provider unreachable' }); }
 });
