@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Teacher - learn any unit with an animated teacher</title>
+<title>Home Tutor - learn any unit with an animated teacher</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <div class="brand">🎓 AI Teacher <span class="tag">free · Hindi · English · Hinglish</span></div>
+  <div class="brand">🎓 Home Tutor <span class="tag">free · Hindi · English · Hinglish</span></div>
   <div class="hdr-right">
     <select id="lang" title="Teaching language">
       <option value="hinglish">Hinglish</option>
@@ -21,6 +21,7 @@
       <option value="0.75">Slow</option><option value="0.9" selected>Normal-slow</option><option value="1.05">Normal</option>
     </select>
     <button id="btnSettings" class="ghost">⚙ AI settings</button>
+    <span id="who" class="note"></span><button id="btnLogout" class="ghost">Logout</button>
   </div>
 </header>
 <main>
@@ -62,12 +63,24 @@
   </section>
 </main>
 
+<dialog id="authDlg">
+  <form method="dialog">
+    <h3 id="authTitle">Login to Home Tutor</h3>
+    <label id="authNameLbl">Name <input id="authName" hidden placeholder="Your name"></label>
+    <label>Email <input id="authEmail" type="email" autocomplete="username"></label>
+    <label>Password <input id="authPass" type="password" autocomplete="current-password" placeholder="min 8 characters"></label>
+    <div id="authErr" class="note" style="color:#f5b84b"></div>
+    <div class="row"><button id="authGo" class="primary">Login</button><a href="#" id="authSwitch" class="note">New here? Create account</a></div>
+    <p class="note">First request after a while can take up to a minute: the free server sleeps when idle.</p>
+  </form>
+</dialog>
 <dialog id="settings">
   <form method="dialog">
     <h3>AI settings</h3>
     <p class="note">Needs a free API key from the provider you choose (Groq or Google AI Studio both have free tiers with daily limits). The key is stored only in this browser (localStorage) and is sent only to that provider. Nothing is stored on any server and nothing is in this site's code.</p>
     <label>Provider
       <select id="provider">
+        <option value="server">Home Tutor server (free, default)</option>
         <option value="groq">Groq (your own free key)</option>
         <option value="gemini">Google Gemini (your own free key)</option>
         <option value="custom">Custom OpenAI-compatible URL</option>
