@@ -14,7 +14,7 @@ const teacher = { impl: svgTeacher, gesture(g) { this.impl.gesture(g); }, speaki
   try {
     const c = document.createElement('canvas'); if (!(c.getContext('webgl2') || c.getContext('webgl'))) return;
     const { createTeacher3D } = await import('./teacher3d.js');
-    const t3 = await createTeacher3D($('teacher3d'), 'assets/teacher.vrm');
+    const t3 = await createTeacher3D($('teacher3d'), 'assets/1-teacher.vrm');
     $('teacher').style.display = 'none'; $('teacher3d').hidden = false; $('credit').hidden = false; teacher.impl = t3; window.__teacher3d = true;
   } catch (e) { console.warn('3D teacher unavailable, using the drawn teacher:', e && e.message); }
 })();
