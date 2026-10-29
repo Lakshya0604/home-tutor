@@ -1,0 +1,40 @@
+:root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2740;--tx:#e8ecf5;--mut:#8f9bb5;--acc:#5b8cff;--ok:#3ecf8e;--warn:#f5b84b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,Segoe UI,Roboto,"Noto Sans Devanagari",sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid #2a3552}
+.brand{font-weight:700;font-size:18px}.tag{font-weight:400;color:var(--mut);font-size:12px;margin-left:8px}
+.hdr-right{display:flex;gap:8px}
+main{flex:1;display:grid;grid-template-columns:1.25fr 1fr;gap:12px;padding:12px;min-height:0}
+@media(max-width:900px){main{grid-template-columns:1fr;overflow:auto}body{height:auto}}
+#stage{display:grid;grid-template-columns:230px 1fr;gap:12px;background:var(--panel);border-radius:14px;padding:12px;min-height:0}
+#teacherWrap{display:flex;flex-direction:column;align-items:center;background:var(--panel2);border-radius:12px;padding:8px}
+#teacher{width:100%;max-width:230px}
+.status{font-size:12px;color:var(--mut);margin-top:4px;text-align:center;min-height:18px}
+#boardWrap{background:#10331f;background:linear-gradient(160deg,#12382a,#0e2a21);border:6px solid #6b4a2b;border-radius:10px;padding:12px 16px;overflow:auto;min-height:0}
+.board-title{font-size:13px;color:#b9e8cf;opacity:.8;margin-bottom:6px;border-bottom:1px dashed #3d7a62;padding-bottom:4px}
+#board{font-size:18px;color:#f4fff8}
+#board .item{margin:6px 0;padding-left:18px;position:relative;opacity:0;transform:translateY(6px);animation:in .5s forwards}
+#board .item::before{content:"✎";position:absolute;left:0;color:#ffd96b}
+@keyframes in{to{opacity:1;transform:none}}
+#diagram svg{max-width:100%;margin-top:10px;background:#0b2219;border-radius:8px}
+#chat{background:var(--panel);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:0;gap:8px}
+#log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:120px}
+.msg{padding:8px 12px;border-radius:12px;max-width:92%;white-space:pre-wrap}
+.msg.t{background:var(--panel2);align-self:flex-start}.msg.u{background:#27427f;align-self:flex-end}.msg.s{background:transparent;color:var(--mut);font-size:12px;align-self:center;padding:2px}
+.msg.warn{color:var(--warn)}
+.q{margin:8px 0}.q textarea{width:100%;min-height:50px}
+.res{border-left:3px solid var(--acc);padding-left:8px;margin:6px 0}
+#controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#progress{color:var(--mut);font-size:12px;margin-left:auto}
+#doubtBox{display:flex;gap:6px}#doubtBox input{flex:1}
+#composer textarea{width:100%;height:90px}
+.row{display:flex;gap:6px;margin-top:6px;align-items:center}.row input[type=text],.row input:not([type]){flex:1;min-width:0}
+button,select,input,textarea{background:#202a45;color:var(--tx);border:1px solid #33416b;border-radius:8px;padding:7px 10px;font:inherit}
+button{cursor:pointer}button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--acc);border-color:var(--acc);font-weight:600}
+button.ghost{background:transparent}
+.file{border:1px solid #33416b;border-radius:8px;padding:7px 10px;cursor:pointer;white-space:nowrap}.file input{display:none}
+.note{color:var(--mut);font-size:12px;margin-top:4px}
+dialog{background:var(--panel);color:var(--tx);border:1px solid #33416b;border-radius:12px;max-width:440px}
+dialog label{display:block;margin:8px 0}dialog input,dialog select{width:100%;margin-top:3px}
+dialog::backdrop{background:#000a}

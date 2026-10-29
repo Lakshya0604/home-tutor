@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Teacher - learn any unit with an animated teacher</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">🎓 AI Teacher <span class="tag">free · Hindi · English · Hinglish</span></div>
+  <div class="hdr-right">
+    <select id="lang" title="Teaching language">
+      <option value="hinglish">Hinglish</option>
+      <option value="hindi">हिंदी (Hindi)</option>
+      <option value="english">English</option>
+    </select>
+    <select id="voice" title="Teacher voice"></select>
+    <button id="btnPreview" class="ghost" title="Hear a sample of this voice">🔊 Preview</button>
+    <select id="rate" title="Speaking speed">
+      <option value="0.75">Slow</option><option value="0.9" selected>Normal-slow</option><option value="1.05">Normal</option>
+    </select>
+    <button id="btnSettings" class="ghost">⚙ AI settings</button>
+  </div>
+</header>
+<main>
+  <section id="stage">
+    <div id="teacherWrap">
+      <svg id="teacher" viewBox="0 0 300 340" aria-label="Animated teacher"></svg>
+      <div id="status" class="status">Idle</div>
+    </div>
+    <div id="boardWrap">
+      <div class="board-title" id="boardTitle">Board</div>
+      <div id="board"></div>
+      <div id="diagram"></div>
+    </div>
+  </section>
+  <section id="chat">
+    <div id="log"></div>
+    <div id="controls">
+      <button id="btnPause" disabled>⏸ Pause</button>
+      <button id="btnDoubt" disabled>❓ Doubt</button>
+      <button id="btnResume" disabled>▶ Resume</button>
+      <button id="btnTest" disabled>📝 Unit test</button>
+      <span id="progress"></span>
+    </div>
+    <div id="doubtBox" hidden>
+      <input id="doubtInput" placeholder="Type your doubt (or use the mic)…">
+      <button id="btnMic" title="Speak your doubt">🎤</button>
+      <button id="btnAsk">Ask</button>
+    </div>
+    <div id="composer">
+      <textarea id="src" placeholder="Paste notes / unit text / syllabus here…  (or attach a PDF below)"></textarea>
+      <div class="row">
+        <label class="file">📎 PDF<input type="file" id="pdf" accept="application/pdf"></label>
+        <input id="videoUrl" placeholder="Video URL (needs its transcript - see note)">
+        <button id="btnVideo" class="ghost">Use video</button>
+        <button id="btnStart" class="primary">▶ Start lesson</button>
+      </div>
+      <div class="note" id="srcInfo">Nothing loaded yet.</div>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h3>AI settings</h3>
+    <p class="note">Needs a free API key from the provider you choose (Groq or Google AI Studio both have free tiers with daily limits). The key is stored only in this browser (localStorage) and is sent only to that provider. Nothing is stored on any server and nothing is in this site's code.</p>
+    <label>Provider
+      <select id="provider">
+        <option value="groq">Groq (your own free key)</option>
+        <option value="gemini">Google Gemini (your own free key)</option>
+        <option value="custom">Custom OpenAI-compatible URL</option>
+      </select>
+    </label>
+    <label>Model <input id="model" placeholder="model name"></label>
+    <label id="lblBase">Base URL <input id="baseUrl" placeholder="https://.../v1"></label>
+    <label id="lblKey">API key <input id="apiKey" type="password" autocomplete="off" placeholder="stored in this browser only"></label>
+    <div class="row"><button value="ok" class="primary" id="saveSettings">Save</button><button value="cancel" class="ghost">Close</button></div>
+  </form>
+</dialog>
+<script type="module" src="app.js"></script>
+</body>
+</html>
