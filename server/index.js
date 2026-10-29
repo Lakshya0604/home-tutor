@@ -1,6 +1,6 @@
 import express from 'express'; import cors from 'cors'; import helmet from 'helmet'; import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose'; import bcrypt from 'bcryptjs'; import jwt from 'jsonwebtoken';
-const { PORT = 8080, MONGODB_URI: URI_ENV, MONGODB_HOST, MONGODB_USER, MONGODB_PASS, JWT_SECRET, GROQ_API_KEY, GROQ_MODEL = 'llama-3.3-70b-versatile', ALLOWED_ORIGIN } = process.env;
+const { PORT = 8080, MONGODB_URI: URI_ENV, MONGODB_HOST, MONGODB_USER, MONGODB_PASS, JWT_SECRET, GROQ_API_KEY, GROQ_MODEL = 'openai/gpt-oss-120b', ALLOWED_ORIGIN } = process.env;
 const MONGODB_URI = URI_ENV || `mongodb+srv://${encodeURIComponent(MONGODB_USER)}:${encodeURIComponent(MONGODB_PASS)}@${MONGODB_HOST}/hometutor?authSource=admin&retryWrites=true&w=majority`;
 if (!JWT_SECRET || (!URI_ENV && !(MONGODB_HOST && MONGODB_USER && MONGODB_PASS))) { console.error('JWT_SECRET and DB settings are required'); process.exit(1); }
 await mongoose.connect(MONGODB_URI);
