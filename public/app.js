@@ -191,6 +191,7 @@ async function runLesson() {
 $('btnStart').onclick = () => {
   const t = $('src').value.trim();
   if (t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
+  if (!$('srcInfo').textContent.includes('PDF')) $('srcInfo').textContent = `Source loaded: ${t.length} characters.`;
   if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
   stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
@@ -252,11 +253,11 @@ async function grade(box, btn) {
     const g = await chatJSON(gradePrompt(lang(), qa, S.source)); const res = g.results || [];
     let tot = 0; const rem = [];
     const out = document.createElement('div'); out.className = 'msg t';
-    qa.forEach((x, i) => { const r = res[i] || { score: 0, feedback: '' }; tot += +r.score || 0; const d = document.createElement('div'); d.className = 'res'; d.textContent = `Q${i + 1}: ${r.score >= 1 ? '✅' : r.score > 0 ? '🟡' : '❌'} ${r.feedback || ''}${r.remedial ? '\n\nSamjho: ' + r.remedial : ''}`; out.appendChild(d); if (r.remedial) rem.push(r.remedial); });
+    qa.forEach((x, i) => { const r = res[i] || { score: 0, feedback: '' }; tot += +r.score || 0; const d = document.createElement('div'); d.className = 'res'; d.textContent = `Q${i + 1}: ${r.score >= 1 ? '✅' : r.score > 0 ? '🟡' : '❌'} ${r.feedback || ''}${r.remedial ? '\n\n' + ({ english: 'Let\'s understand: ', hindi: 'समझो: ' }[$('lang').value] || 'Samjho: ') + r.remedial : ''}`; out.appendChild(d); if (r.remedial) rem.push(r.remedial); });
     const h = document.createElement('div'); h.innerHTML = `<b>Score: ${tot} / ${qa.length}</b> - ${g.summary || ''}`; out.prepend(h);
     $('log').appendChild(out); $('log').scrollTop = 1e9; btn.textContent = 'Submitted';
     S.playing = true; const tok = ++S.run; setControls();
-    for (const r of rem.slice(0, 4)) { if (tok !== S.run) break; teacher.gesture('explain'); $('board').innerHTML = ''; $('boardTitle').textContent = 'Revision'; addBoard(r.slice(0, 120)); await speakText(r); }
+    for (const r of rem.slice(0, 4)) { if (tok !== S.run) break; teacher.gesture('explain'); $('board').innerHTML = ''; $('boardTitle').textContent = 'Revision'; addBoard(r.length > 140 ? (r.slice(0, 140).replace(/[^.!?।,;]*$/, '').trim() || r.slice(0, 140).replace(/\s\S*$/, '')) + (/[.!?।]$/.test(r.slice(0, 140).replace(/[^.!?।,;]*$/, '').trim()) ? '' : '…') : r); await speakText(r); }
     S.playing = false; teacher.gesture('rest'); status('Done'); setControls();
   } catch (e) { btn.disabled = false; btn.textContent = 'Submit answers'; say('s warn', 'Could not check answers: ' + e.message); }
 }
