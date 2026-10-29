@@ -50,3 +50,5 @@ main>*{min-width:0}
 @media(max-width:640px){header{display:block;padding:8px 12px}.hdr-right{display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:8px}.hdr-right>*{flex:1 1 100px;min-width:0;max-width:100%}.hdr-right #who{flex:0 1 auto}main{padding:10px}#stage{grid-template-columns:1fr;padding:12px}#teacher{max-width:170px}#teacherWrap{padding:6px;align-self:center}#boardWrap{min-height:160px}#board{font-size:16px}.msg{max-width:100%}html,body{overflow-x:hidden}.tag{display:block;margin:0}}
 .hdr-right #voice{flex:1 1 200px;min-width:0;max-width:340px;text-overflow:ellipsis}
 header{flex-wrap:wrap}.hdr-right{flex-wrap:wrap;flex:1 1 auto;justify-content:flex-end;min-width:0}
+#board .step{margin:4px 0 0;padding:6px 10px;background:#f1f5ff;border:1px solid #d6e0fb;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+#board .from{font-size:12.5px;color:var(--mut);margin:2px 0 0 4px}
