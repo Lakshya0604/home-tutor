@@ -19,7 +19,7 @@ export function requireLogin() {
   return new Promise(resolve => {
     if (token() && user()) return resolve(user());
     const dlg = document.getElementById('authDlg'), $ = id => document.getElementById(id); let mode = 'login';
-    const sync = () => { $('authName').hidden = mode === 'login'; $('authTitle').textContent = mode === 'login' ? 'Login to Home Tutor' : 'Create your Home Tutor account'; $('authGo').textContent = mode === 'login' ? 'Login' : 'Register'; $('authSwitch').textContent = mode === 'login' ? 'New here? Create account' : 'Have an account? Login'; $('authErr').textContent = ''; };
+    const sync = () => { $('authNameLbl').hidden = mode === 'login'; $('authName').hidden = mode === 'login'; $('authTitle').textContent = mode === 'login' ? 'Login to Home Tutor' : 'Create your Home Tutor account'; $('authGo').textContent = mode === 'login' ? 'Login' : 'Register'; $('authSwitch').textContent = mode === 'login' ? 'New here? Create account' : 'Have an account? Login'; $('authErr').textContent = ''; };
     $('authSwitch').onclick = e => { e.preventDefault(); mode = mode === 'login' ? 'register' : 'login'; sync(); };
     $('authGo').onclick = async e => {
       e.preventDefault(); $('authErr').textContent = ''; $('authGo').disabled = true; $('authGo').textContent = 'Please wait…';
