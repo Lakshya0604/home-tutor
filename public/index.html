@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Home Tutor - learn any unit with an animated teacher</title>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.0/lib/three-vrm.module.min.js"}}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,7 +29,9 @@
   <section id="stage">
     <div id="teacherWrap">
       <svg id="teacher" viewBox="0 0 300 340" aria-label="Animated teacher"></svg>
+      <div id="teacher3d" hidden aria-label="Animated 3D teacher"></div>
       <div id="status" class="status">Idle</div>
+      <div id="credit" class="note" hidden>Teacher model "Ember" by <a href="https://vtubeme.com/free-vrm-avatars/ember" target="_blank" rel="noopener">VTubeMe</a>, CC BY 4.0</div>
     </div>
     <div id="boardWrap">
       <div class="board-title" id="boardTitle">Board</div>
