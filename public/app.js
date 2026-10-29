@@ -7,7 +7,17 @@ import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt } fro
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
-const teacher = createTeacher($('teacher'));
+const svgTeacher = createTeacher($('teacher'));
+const teacher = { impl: svgTeacher, gesture(g) { this.impl.gesture(g); }, speaking(v) { this.impl.speaking(v); }, mouthLevel(v) { this.impl.mouthLevel?.(v); } };
+// Upgrade to the 3D human teacher when WebGL and the model load; otherwise keep the drawn teacher.
+(async () => {
+  try {
+    const c = document.createElement('canvas'); if (!(c.getContext('webgl2') || c.getContext('webgl'))) return;
+    const { createTeacher3D } = await import('./teacher3d.js');
+    const t3 = await createTeacher3D($('teacher3d'), 'assets/teacher.vrm');
+    $('teacher').style.display = 'none'; $('teacher3d').hidden = false; $('credit').hidden = false; teacher.impl = t3; window.__teacher3d = true;
+  } catch (e) { console.warn('3D teacher unavailable, using the drawn teacher:', e && e.message); }
+})();
 const S = { chunks: [], data: [], idx: 0, sent: 0, run: 0, source: '', playing: false, started: false, titles: [], shown: new Set(), busy: false, testReady: false, qa: null };
 const lang = () => $('lang').value;
 const rate = () => parseFloat($('rate').value);
