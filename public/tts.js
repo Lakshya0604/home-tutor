@@ -3,14 +3,11 @@ export const PIPER = {
   hindi: [
     { id: 'hi_IN-priyamvada-medium', label: 'Priyamvada (Hindi, female)' },
     { id: 'hi_IN-pratham-medium', label: 'Pratham (Hindi, male)' },
-    { id: 'hi_IN-rohan-medium', label: 'Rohan (Hindi, male)' },
   ],
   english: [
     { id: 'en_US-hfc_female-medium', label: 'HFC Female (English, female)' },
     { id: 'en_US-kristin-medium', label: 'Kristin (English, female)' },
-    { id: 'en_US-amy-medium', label: 'Amy (English, female)' },
     { id: 'en_US-ryan-medium', label: 'Ryan (English, male)' },
-    { id: 'en_US-lessac-medium', label: 'Lessac (English, male)' },
   ],
 };
 // Hinglish is spoken by a Hindi voice (Devanagari text, English terms in Latin script).
