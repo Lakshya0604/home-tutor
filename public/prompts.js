@@ -3,7 +3,7 @@ const LANG = {
   english: 'Speak in simple, friendly conversational ENGLISH, the way an Indian teacher chats in class. Short sentences, no formal textbook tone.',
   hinglish: 'Speak in casual conversational HINGLISH the way Indian students talk with a friendly teacher ("Chalo dekhte hain...", "Simple si baat hai...", "Matlab..."). Hindi grammar with normal English technical words. Never use formal or shuddh Hindi words. Field "text" must be in Roman script. Field "speak" must be the SAME sentence in Devanagari with the English words kept in Latin letters (e.g. "चलो देखते हैं, machine learning matlab क्या है?").',
 };
-export const langRule = l => LANG[l] || LANG.hinglish;
+export const langRule = l => (LANG[l] || LANG.hinglish) + (l === 'english' ? ' Every field, including board notes, diagram labels, examples and check questions, must be in plain English only. Do not use any Hindi or Hinglish words or Devanagari anywhere.' : '');
 const FORMAT = `Return ONLY JSON: {"title":"short topic title","sentences":[{"text":"one spoken sentence","speak":"(Hinglish only) Devanagari version for the voice","board":"optional short note for the board (max 12 words)","gesture":"explain|point|wave|think|nod"}],"diagram":null OR {"type":"flow","title":"..","steps":["..",".."]} OR {"type":"table","title":"..","headers":[".."],"rows":[[".."]]}}`;
 export function lessonPrompt(lang, chunk, prevTitles) {
   return [
@@ -13,7 +13,7 @@ export function lessonPrompt(lang, chunk, prevTitles) {
 }
 export function doubtPrompt(lang, doubt, chunk, whole) {
   return [
-    { role: 'system', content: `You are the same teacher. The student paused the lesson with a doubt. ${langRule(lang)}\nAnswer using the SOURCE first. If the source does not cover it, say so in one sentence, then answer briefly from general knowledge and mark it "(outside your notes)". 3 to 6 short sentences, give one simple example. End by asking "Samajh aaya?" style check in the chosen language. Board notes optional.\n${FORMAT}` },
+    { role: 'system', content: `You are the same teacher. The student paused the lesson with a doubt. ${langRule(lang)}\nAnswer using the SOURCE first. If the source does not cover it, say so in one sentence, then answer briefly from general knowledge and mark it "(outside your notes)". 3 to 6 short sentences, give one simple example. End with a short understanding check ("Does that make sense?" in English, "Samajh aaya?" in Hinglish, "समझ आया?" in Hindi) in the chosen language only. Board notes optional.\n${FORMAT}` },
     { role: 'user', content: `CURRENT CHUNK:\n${chunk}\n\nSOURCE EXCERPT:\n${whole.slice(0, 5000)}\n\nSTUDENT DOUBT:\n${doubt}` },
   ];
 }
