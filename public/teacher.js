@@ -11,7 +11,7 @@ const GEST = {
 };
 export function createTeacher(svg) {
   svg.innerHTML = `
-  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3a63"/><stop offset="1" stop-color="#1b2540"/></linearGradient></defs>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9efff"/><stop offset="1" stop-color="#d3def8"/></linearGradient></defs>
   <rect width="300" height="340" rx="14" fill="url(#bg)"/>
   <g id="body">
     <path d="M70 340 Q70 250 120 238 L180 238 Q230 250 230 340 Z" fill="#c2415d"/>
