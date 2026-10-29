@@ -52,3 +52,6 @@ main>*{min-width:0}
 header{flex-wrap:wrap}.hdr-right{flex-wrap:wrap;flex:1 1 auto;justify-content:flex-end;min-width:0}
 #board .step{margin:4px 0 0;padding:6px 10px;background:#f1f5ff;border:1px solid #d6e0fb;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere}
 #board .from{font-size:12.5px;color:var(--mut);margin:2px 0 0 4px}
+#teacher3d{width:100%;max-width:220px;aspect-ratio:220/270;border-radius:12px;overflow:hidden;background:linear-gradient(#eaf0ff,#d3def8)}
+#credit{text-align:center;font-size:11px}#credit a{color:inherit}
+@media(max-width:640px){#teacher3d{max-width:170px}}
