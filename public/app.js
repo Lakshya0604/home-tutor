@@ -1,5 +1,6 @@
 import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
+import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chatJSON } from './llm.js';
 import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
@@ -65,7 +66,7 @@ $('btnPreview').onclick = async () => {
 };
 
 // ---------- settings ----------
-function loadSettings() { const c = cfg(); $('provider').value = c.provider || 'groq'; $('model').value = c.model || ''; $('baseUrl').value = c.baseUrl || ''; $('apiKey').value = c.apiKey || ''; syncSettingsUI(); }
+function loadSettings() { const c = cfg(); $('provider').value = c.provider || 'server'; $('model').value = c.model || ''; $('baseUrl').value = c.baseUrl || ''; $('apiKey').value = c.apiKey || ''; syncSettingsUI(); }
 function syncSettingsUI() { const p = $('provider').value; $('lblBase').hidden = p !== 'custom'; $('model').placeholder = providerDefaults[p].model || 'model name'; }
 $('provider').onchange = syncSettingsUI;
 $('btnSettings').onclick = () => { loadSettings(); $('settings').showModal(); };
@@ -233,3 +234,7 @@ async function grade(box, btn) {
 }
 setControls();
 window.__app = { S, teacher };
+
+// ---------- account ----------
+requireLogin().then(u => { $('who').textContent = u.name || u.email; });
+$('btnLogout').onclick = logout;
