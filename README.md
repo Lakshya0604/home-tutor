@@ -17,4 +17,4 @@ Pause, ask doubts, resume from the same line, then take an end-of-unit test with
 - Text over 60,000 characters is cut to the first 60,000.
 
 ## Voice licences
-Piper voices come from https://huggingface.co/rhasspy/piper-voices. Several are CC BY-NC-SA 4.0 (non-commercial, attribution, share-alike): Priyamvada, Pratham, HFC Female, Ryan. Kristin is public domain. Check each voice's MODEL_CARD before any commercial use. Rohan, Amy and Lessac were removed from the list until their licences are reviewed.
+Piper voices come from https://huggingface.co/rhasspy/piper-voices. Only Kristin (English, public domain) is offered. The Hindi Piper voices are CC BY-NC-SA 4.0 or have unreviewed licences, so they are not offered. Check a voice's MODEL_CARD before adding it, especially for commercial use.
