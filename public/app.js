@@ -56,6 +56,7 @@ let progressNote = null;
 const onProg = p => { if (p && p.total) status(`Downloading voice model ${Math.round(100 * p.loaded / p.total)}% (one time, then cached)`); };
 async function speakText(text) {
   const v = $('voice').value;
+  if (!v) throw new Error('No voice available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (natural online voices), or switch the language to English.');
   teacher.speaking(true);
   try {
     if (v.startsWith('dev:')) { status('Speaking (device voice)'); await speakDevice(text, v.slice(4), lang() === 'english' ? 'en-IN' : 'hi-IN', rate()); }
@@ -113,6 +114,7 @@ $('pdf').onchange = async e => {
     const r = await readPdf(f);
     if (r.text.replace(/\s/g, '').length < (r.ocr ? 20 : 200)) { $('srcInfo').textContent = 'No text could be read from this PDF, even with OCR. Paste the text instead.'; return; }
     $('src').value = r.text.trim(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
+    if (r.total > r.pages) { const m = `Only the first ${r.pages} of ${r.total} pages were read${r.ocr ? ' (OCR limit)' : ''}. Paste the remaining pages separately to learn them.`; $('srcInfo').textContent += ' ' + m; say('s warn', m); }
   } catch (err) { $('srcInfo').textContent = 'Could not read PDF: ' + err.message; }
 };
 $('btnVideo').onclick = () => {
@@ -189,6 +191,7 @@ async function runLesson() {
 $('btnStart').onclick = () => {
   const t = $('src').value.trim();
   if (t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
+  if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
   stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
   Object.assign(S, { source: capped, chunks: chunkText(capped), data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, lessonId: undefined, title0: '' });
