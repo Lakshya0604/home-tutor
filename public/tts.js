@@ -1,13 +1,9 @@
 // Voice engine: free neural voices (Piper, runs in the browser) + the device's own voices as a fallback option.
 export const PIPER = {
-  hindi: [
-    { id: 'hi_IN-priyamvada-medium', label: 'Priyamvada (Hindi, female)' },
-    { id: 'hi_IN-pratham-medium', label: 'Pratham (Hindi, male)' },
-  ],
+  // Only licence-cleared voices stay here. The Hindi Piper voices are CC BY-NC-SA / unclear, so they are not offered.
+  hindi: [],
   english: [
-    { id: 'en_US-hfc_female-medium', label: 'HFC Female (English, female)' },
     { id: 'en_US-kristin-medium', label: 'Kristin (English, female)' },
-    { id: 'en_US-ryan-medium', label: 'Ryan (English, male)' },
   ],
 };
 // Hinglish is spoken by a Hindi voice (Devanagari text, English terms in Latin script).
