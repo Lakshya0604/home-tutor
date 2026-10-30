@@ -11,6 +11,7 @@
 <header>
   <div class="brand">🎓 Home Tutor <span class="tag">free · Hindi · English · Hinglish</span></div>
   <div class="hdr-right">
+    <select id="avatar" title="Choose your teacher"><option value="ember">Teacher: Ember</option><option value="nova">Teacher: Nova</option><option value="kai">Teacher: Kai</option><option value="sky">Teacher: Sky</option></select>
     <select id="lang" title="Teaching language">
       <option value="hinglish">Hinglish</option>
       <option value="hindi">हिंदी (Hindi)</option>
@@ -35,6 +36,7 @@
     </div>
     <div id="boardWrap">
       <div class="board-title" id="boardTitle">Board</div>
+      <div id="prep" class="prep" hidden role="status" aria-live="polite"><span class="spin"></span><span class="dots"><i></i><i></i><i></i></span><span id="prepText"></span></div>
       <div id="board"></div>
       <div id="diagram"></div>
     </div>
