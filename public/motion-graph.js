@@ -11,7 +11,8 @@ export function checkedMotionGraph(g, source, sentences) {
   if (!/\bu\s*=\s*-?\d+(?:\.\d+)?\s*m\/s\b/i.test(g.sourceQuote) || !/\ba\s*=\s*-?\d+(?:\.\d+)?\s*m\/s(?:²|\^2)/i.test(g.sourceQuote) || !/\bt\s*=\s*-?\d+(?:\.\d+)?\s*s\b/i.test(g.sourceQuote)) throw new Error('Motion graph supports explicit m/s, m/s² and s only; convert the source units first.');
   const numeric=[...g.sourceQuote.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
   if (![u,a,t].every(v=>numeric.includes(v))) throw new Error('Motion graph values are not all in its source excerpt.');
-  if (!Array.isArray(g.explanation) || new Set(g.explanation).size<3 || g.explanation.some(i=>!Number.isInteger(i)||!sentences[i])) throw new Error('Motion graph needs explanation sentences for axes, slope and area.');
+  const spoken = sentences.map(s=>s.text || '').join(' ');
+  if (!/horizontal|axis|axes|क्षैतिज/i.test(spoken) || !/vertical|ऊर्ध्व|लंबवत/i.test(spoken) || !/slope|ढाल/i.test(spoken) || !/area|क्षेत्रफल/i.test(spoken)) throw new Error('Motion graph needs explanations of axes, slope and area.');
   return {...g,v:u+a*t,s:u*t+.5*a*t*t};
 }
 export function renderMotionGraph(host,g) {
