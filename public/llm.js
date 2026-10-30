@@ -25,11 +25,11 @@ export async function chat(messages, { json = true, temperature = 0.4, signal } 
       const r = await fetch(url, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', ...(prov === 'server' ? { Authorization: 'Bearer ' + token() } : d.key && c.apiKey ? { Authorization: 'Bearer ' + c.apiKey } : {}) }, body: JSON.stringify(body) });
       clearTimeout(to);
       if (r.status === 401 && prov === 'server') { logout(); throw new Error('Session expired, please login again.'); }
-      if (!r.ok) { const t = await r.text(); throw new Error(`AI provider error ${r.status}: ${t.slice(0, 160)}`); }
+      if (!r.ok) { const t = await r.text(); const er = new Error(`AI provider error ${r.status}: ${t.slice(0, 160)}`); if (r.status === 429) er.noRetry = true; throw er; }
       const j = await r.json(); const out = j.choices?.[0]?.message?.content;
       if (!out) throw new Error('Empty AI reply');
       return out;
-    } catch (e) { lastErr = e; if (e.name === 'AbortError' && signal?.aborted) throw e; await new Promise(r => setTimeout(r, 1200 * (attempt + 1))); }
+    } catch (e) { lastErr = e; if (e.noRetry || (e.name === 'AbortError' && signal?.aborted)) throw e; await new Promise(r => setTimeout(r, 1200 * (attempt + 1))); }
   }
   throw lastErr;
 }
@@ -41,6 +41,6 @@ export function parseJSON(txt) {
 }
 export async function chatJSON(messages, opts) {
   let last;
-  for (let i = 0; i < 2; i++) { try { return parseJSON(await chat(messages, opts)); } catch (e) { last = e; } }
+  for (let i = 0; i < 2; i++) { try { return parseJSON(await chat(messages, opts)); } catch (e) { last = e; if (e.noRetry) throw e; } }
   throw last;
 }
