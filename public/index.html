@@ -18,11 +18,11 @@
       <option value="english">English</option>
     </select>
     <select id="voice" title="Teacher voice"></select>
-    <button id="btnPreview" class="ghost" title="Hear a sample of this voice">🔊 Preview</button>
+    <button id="btnPreview" class="ghost" title="Hear a sample of this voice">Preview voice</button>
     <select id="rate" title="Speaking speed">
       <option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
     </select>
-    <button id="btnSettings" class="ghost">⚙ AI settings</button>
+    <button id="btnSettings" class="ghost">AI settings</button>
     <span id="who" class="note"></span><button id="btnLogout" class="ghost">Logout</button>
   </div>
 </header>
@@ -44,25 +44,25 @@
   <section id="chat">
     <div id="log"></div>
     <div id="controls">
-      <button id="btnPause" disabled>⏸ Pause</button>
-      <button id="btnDoubt" disabled>❓ Doubt</button>
-      <button id="btnResume" disabled>▶ Resume</button>
-      <button id="btnVoiceAsk" disabled title="Interrupt and ask by speaking">🎤 Ask by voice</button>
-      <button id="btnTest" disabled>📝 Unit test</button>
+      <button id="btnPause" disabled>Pause</button>
+      <button id="btnDoubt" disabled>Doubt</button>
+      <button id="btnResume" disabled>Resume</button>
+      <button id="btnVoiceAsk" disabled title="Interrupt and ask by speaking">Ask by voice</button>
+      <button id="btnTest" disabled>Unit test</button>
       <span id="progress"></span>
     </div>
     <div id="doubtBox" hidden>
       <input id="doubtInput" placeholder="Type your doubt (or use the mic)…">
-      <button id="btnMic" title="Speak your doubt">🎤</button>
+      <button id="btnMic" title="Speak your doubt">Mic</button>
       <button id="btnAsk">Ask</button>
     </div>
     <div id="composer">
       <textarea id="src" placeholder="Paste notes / unit text / syllabus here…  (or attach a PDF below)"></textarea>
       <div class="row">
-        <label class="file">📎 PDF<input type="file" id="pdf" accept="application/pdf"></label>
+        <label class="file">PDF<input type="file" id="pdf" accept="application/pdf"></label>
         <input id="videoUrl" placeholder="Video URL (needs its transcript - see note)">
         <button id="btnVideo" class="ghost">Use video</button>
-        <button id="btnStart" class="primary">▶ Start lesson</button>
+        <button id="btnStart" class="primary">Start lesson</button>
       </div>
       <div class="note" id="srcInfo">Nothing loaded yet.</div>
     </div>
