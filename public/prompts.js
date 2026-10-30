@@ -36,3 +36,10 @@ export function outlinePrompt(lang, digest, n, full) {
     { role: 'user', content: digest },
   ];
 }
+
+export function summaryPrompt(lang, text, ids) {
+  return [
+    { role: 'system', content: `You read study material so a teacher can plan a course. ${langRule(lang).split('Field')[0]}\nThe text has parts numbered ${ids.join(', ')}. For EACH part write one factual line (max 30 words) saying what it teaches, naming its main concepts and any formulas or worked numericals. Use only what the text says. Return ONLY JSON: {"parts":[{"part":${ids[0]},"summary":"..."}]} with one entry per part.` },
+    { role: 'user', content: text },
+  ];
+}
