@@ -35,7 +35,9 @@ export async function createTeacher3D(host, modelUrl) {
   let gest = 'rest', speaking = false, ext = null, mouth = 0, mouthT = 0, lastPulse = 0, nextBlink = 1500, blink = -1;
   const cur = { r: [...POSE.rest.r], l: [...POSE.rest.l] };
   const clock = new THREE.Clock();
+  let alive = true;
   function frame() {
+    if (!alive) return;
     const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime, now = performance.now();
     const P = POSE[gest] || POSE.rest;
     let osc = 0;
@@ -69,5 +71,6 @@ export async function createTeacher3D(host, modelUrl) {
   requestAnimationFrame(frame);
   const resize = () => { const w = host.clientWidth, h = host.clientHeight; if (w && h) { renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); } };
   new ResizeObserver(resize).observe(host);
-  return { gesture: g => { gest = POSE[g] ? g : 'explain'; }, speaking: v => { speaking = v; }, mouthLevel: v => { ext = v; }, _vrm: vrm, _renderer: renderer };
+  const dispose = () => { alive = false; try { renderer.dispose(); renderer.domElement.remove(); } catch {} };
+  return { dispose, gesture: g => { gest = POSE[g] ? g : 'explain'; }, speaking: v => { speaking = v; }, mouthLevel: v => { ext = v; }, _vrm: vrm, _renderer: renderer };
 }
