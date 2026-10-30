@@ -3,7 +3,7 @@ import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chatJSON } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
-import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt } from './prompts.js';
+import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt, summaryPrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
@@ -144,20 +144,56 @@ function chunkText(t) {
 
 // ---------- topics ----------
 const topicOf = i => (S.topics || []).find(t => i >= t.from && i <= t.to);
+
 async function planTopics() {
   const n = S.chunks.length, full = S.source.length <= 9000;
-  const digest = full ? S.chunks.map((c, i) => `[PART ${i}]\n${c}`).join('\n\n') : S.chunks.map((c, i) => `[PART ${i}] ${c.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n');
+  let digest, readN = n, notRead = [];
+  if (full) digest = S.chunks.map((c, i) => `[PART ${i}]\n${c}`).join('\n\n');
+  else {
+    // staged reading: summarise consecutive batches (<= ~7000 chars) one call at a time, then plan from the summaries
+    const batches = []; let cur = [], len = 0;
+    S.chunks.forEach((c, i) => { if (cur.length && len + c.length > 7000) { batches.push(cur); cur = []; len = 0; } cur.push(i); len += c.length; });
+    if (cur.length) batches.push(cur);
+    const key = S.source.length + ':' + n; if (S.sumKey !== key) { S.sumKey = key; S.sumLines = new Array(n).fill(null); }
+    const MAXB = 40, lines = S.sumLines; notRead = [];
+    for (let b = 0; b < batches.length; b++) {
+      const ids = batches[b];
+      if (ids.every(i => lines[i])) continue;
+      if (b >= MAXB) { ids.forEach(i => notRead.push(i)); continue; }
+      status(`Reading the whole material… batch ${b + 1}/${Math.min(batches.length, MAXB)}`);
+      let m = new Map();
+      for (let attempt = 0; attempt < 1 && !ids.every(i => m.get(i)); attempt++) {
+        if (attempt) { status(`Reading the whole material… batch ${b + 1} retry (free AI limit, waiting)`); await new Promise(r => setTimeout(r, attempt * 12000)); }
+        try {
+          const o = await chatJSON(summaryPrompt(lang(), ids.map(i => `[PART ${i}]\n${S.chunks[i]}`).join('\n\n'), ids));
+          (o.parts || []).forEach(p => { const s = String(p.summary || '').slice(0, 260); if (s) m.set(+p.part, s); });
+        } catch { /* retry */ }
+      }
+      ids.forEach(i => { if (m.get(i)) lines[i] = m.get(i); else notRead.push(i); });
+    }
+    readN = n - notRead.length;
+    if (notRead.length) {
+      say('s', `Reading is not finished: ${readN} of ${n} parts read in full, parts ${notRead.join(', ')} still unread (free AI limit or error). Your finished reading is kept. Press Play to continue preparing; the lesson will not start on a partial reading.`);
+      return false;
+    }
+    digest = S.chunks.map((c, i) => `[PART ${i}] ${lines[i]}`).join('\n');
+  }
   let topics = null;
   try {
-    const o = await chatJSON(outlinePrompt(lang(), digest.slice(0, 12000), n, full));
-    const t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: +x.from, to: +x.to }));
-    let ok = t.length > 0 && t[0].from === 0 && t[t.length - 1].to === n - 1;
-    for (let k = 1; ok && k < t.length; k++) if (t[k].from !== t[k - 1].to + 1) ok = false;
-    if (ok && t.every(x => x.title && x.to >= x.from)) topics = t;
+    const o = await chatJSON(outlinePrompt(lang(), digest.slice(0, 14000), n, full));
+    // repair the AI's plan: order by start, make topics contiguous, cover parts 0..n-1 exactly once
+    let t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: Math.round(+x.from), to: Math.round(+x.to) })).filter(x => x.title && Number.isFinite(x.from) && Number.isFinite(x.to));
+    t.sort((x, y) => x.from - y.from);
+    t = t.filter((x, k) => k === 0 || x.from > t[k - 1].from);
+    t.forEach((x, k) => { x.from = k === 0 ? 0 : t[k - 1].to + 1; x.to = k === t.length - 1 ? n - 1 : Math.max(x.from, Math.min(t[k + 1].from - 1, n - 1)); });
+    t = t.filter(x => x.from <= n - 1 && x.to >= x.from);
+    if (t.length && t[t.length - 1].to < n - 1) t[t.length - 1].to = n - 1;
+    if (t.length) topics = t;
   } catch { /* fall back below */ }
   if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
-  S.topics = topics; S.planFull = full;
-  say('s', `Read all ${n} parts${full ? '' : ' (topic plan made from the opening lines of each part; every part is still taught from its full text)'}. Topics: ` + topics.map((t, i) => `${i + 1}. ${t.title}`).join('  |  '));
+  S.topics = topics; S.planFull = true; S.notRead = [];
+  return true;
+  say('s', (full ? `Read all ${n} parts in full before planning.` : `Read all ${n} parts in full, batch by batch, before planning.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ' Topics: ' + topics.map((t, i) => `${i + 1}. ${t.title}`).join('  |  '));
 }
 
 // ---------- lesson ----------
@@ -195,7 +231,7 @@ function setControls() {
 async function runLesson() {
   const token = ++S.run; S.playing = true; S.topicPause = false; setControls();
   try {
-    if (!S.topics) { status('Reading the whole material…'); await planTopics(); if (token !== S.run) return; }
+    if (!S.topics) { status('Reading the whole material…'); const okPlan = await planTopics(); if (token !== S.run) return; if (!okPlan) { S.playing = false; setControls(); status('Reading not finished - press Play to continue'); return; } }
     while (S.idx < S.chunks.length) {
       status('Preparing lesson part ' + (S.idx + 1) + '…');
       const d = await loadChunk(S.idx);
