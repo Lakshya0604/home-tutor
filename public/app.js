@@ -296,7 +296,7 @@ $('btnAsk').onclick = async () => {
     const hits = all.filter(h => h.part !== cur).slice(0, 3);
     const noEvidence = all.length === 0;
     const parts = hits.map(h => ({ part: h.part + 1, text: S.chunks[h.part].slice(0, 1400) }));
-    if (noEvidence) say('s', 'Keyword search found NO part of your document that matches this question, so the notes may not cover it. The answer below is marked as outside your notes.');
+    if (noEvidence) say('s', 'Keyword search found no matching part in your document. That does not prove the notes lack the answer (different wording can be missed). The answer below could not be confirmed from your notes and is marked as outside your notes.');
     else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
     else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
     const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence));
