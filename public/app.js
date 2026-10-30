@@ -1,3 +1,4 @@
+import { validateCoverage, validateDoubt } from './lesson-quality.js';
 import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
@@ -66,6 +67,7 @@ function fillVoices() {
   const g = voiceGroup(lang()), saved = localStorage.getItem('aiteacher.voice.' + g);
   const opts = voiceOptions(); $('voice').innerHTML = '';
   for (const o of opts) { const e = document.createElement('option'); e.value = o.value; e.textContent = o.label; $('voice').appendChild(e); }
+  if (!opts.length) { const e = document.createElement('option'); e.value = ''; e.textContent = 'No voice found in this browser'; $('voice').appendChild(e); }
   if (saved && opts.some(o => o.value === saved)) $('voice').value = saved;
   const nat = opts.find(o => o.nat);
   $('voice').title = nat ? 'Natural browser voices found - best quality' : 'No natural browser voice found. For the best Hindi/Hinglish voice open this site in Microsoft Edge (Madhur / Swara / Neerja natural voices) or Chrome on Android.';
@@ -207,7 +209,7 @@ async function planTopics() {
     t = t.filter(x => x.from <= n - 1 && x.to >= x.from);
     if (t.length && t[t.length - 1].to < n - 1) t[t.length - 1].to = n - 1;
     if (t.length) topics = t;
-  } catch { /* fall back below */ }
+  } catch (e) { say('s warn', 'Planning stopped: ' + e.message + '. Your source is kept. Press Resume when ready.'); return false; }
   if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
   S.topics = topics; S.planFull = true; S.notRead = [];
   say('s', (full ? `Read all ${n} parts in full.` : `Read all ${n} parts in full, batch by batch.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ` Ready: ${topics.length} topic${topics.length > 1 ? 's' : ''}, taught one at a time. The lesson plan stays behind the scenes.`);
@@ -219,8 +221,7 @@ function loadChunk(i) {
   if (i >= S.chunks.length) return null;
   if (!S.data[i]) {
     S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4), topicOf(i)?.title, topicOf(i)?.plan)).then(d => {
-      if (!Array.isArray(d.sentences) || !d.sentences.length) throw new Error('AI returned no lesson');
-      d.sentences = d.sentences.filter(s => s && s.text).slice(0, 16); return d;
+      return validateCoverage(d, S.chunks[i]);
     });
     S.data[i].catch(() => { S.data[i] = null; });
   }
@@ -243,18 +244,18 @@ function addBoard(t, step, cls) {
 }
 function setControls() {
   $('btnPause').disabled = !S.playing; $('btnResume').disabled = S.playing || !S.started || S.finished;
-  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? '▶ Next topic' : '▶ Resume'; $('btnTest').disabled = !S.testReady;
+  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next topic' : 'Resume'; $('btnTest').disabled = !S.testReady;
   $('progress').textContent = S.started ? `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}` : '';
 }
 async function runLesson() {
   const token = ++S.run; S.playing = true; S.topicPause = false; setControls();
   try {
-    if (!S.topics) { status('Reading the whole material…'); const okPlan = await planTopics(); if (token !== S.run) return; if (!okPlan) { S.playing = false; setControls(); status('Reading not finished - press Play to continue'); return; } }
+    if (!S.topics) { status('Reading the whole material…'); const okPlan = await planTopics(); if (token !== S.run) return; if (!okPlan) { S.playing = false; setControls(); status('Reading not finished - press Resume to continue'); return; } }
     while (S.idx < S.chunks.length) {
       status('Preparing lesson part ' + (S.idx + 1) + '…');
       const d = await loadChunk(S.idx);
       if (token !== S.run) return;
-      loadChunk(S.idx + 1)?.catch(() => {});
+      // Prepare only the part being taught. No speculative provider calls.
       if (S.sent === 0) { S.shown = new Set(); S.titles.push(d.title || ''); if (!S.title0 && d.title) S.title0 = d.title; }
       showBoard(d, S.sent);
       for (; S.sent < d.sentences.length; S.sent++) {
@@ -315,7 +316,7 @@ $('btnAsk').onclick = async () => {
     if (noEvidence) say('s', 'Keyword search found no matching part in your document. That does not prove the notes lack the answer (different wording can be missed). The answer below could not be confirmed from your notes and is marked as outside your notes.');
     else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
     else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
-    const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence));
+    const d = validateDoubt(await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence)), [cur + 1, ...parts.map(p => p.part)], noEvidence);
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
     S.playing = true; const tok = ++S.run; setControls();
