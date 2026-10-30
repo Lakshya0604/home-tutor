@@ -22,7 +22,7 @@ export function validateCoverage(d, source) {
     const explained = mapped.map(s => [s.text, s.step?.math].join(' ')).join(' ');
     const numbers = [...units[id].matchAll(/-?\d+(?:\.\d+)?/g)].map(m => m[0]);
     if (numbers.length > 1 && numbers.some(n => !explained.includes(n))) throw new Error('A worked example left out source values. This part is not marked taught.');
-    if (/[=²]|\bsquared\b/.test(units[id]) && !mapped.some(s => s.step?.math)) throw new Error('A source calculation has no worked board step. This part is not marked taught.');
+    if (/\b(formula|substitute|calculate|calculation|to find|follows from)\b/i.test(units[id]) && !mapped.some(s => s.step?.math)) throw new Error('A source calculation has no worked board step. This part is not marked taught.');
   }
   return d;
 }
