@@ -10,19 +10,35 @@ import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices
 const $ = id => document.getElementById(id);
 const svgTeacher = createTeacher($('teacher'));
 const teacher = { impl: svgTeacher, gesture(g) { this.impl.gesture(g); }, speaking(v) { this.impl.speaking(v); }, mouthLevel(v) { this.impl.mouthLevel?.(v); } };
-// Upgrade to the 3D human teacher when WebGL and the model load; otherwise keep the drawn teacher.
-(async () => {
+// Four human-style 3D teachers (VTubeMe, CC BY 4.0). Falls back to the drawn teacher when WebGL or the model fails.
+const AVATARS = [
+  { id: 'ember', name: 'Ember', file: 'assets/1-teacher.vrm' },
+  { id: 'nova', name: 'Nova', file: 'assets/1-nova.vrm' },
+  { id: 'kai', name: 'Kai', file: 'assets/2-kai.vrm' },
+  { id: 'sky', name: 'Sky', file: 'assets/3-sky.vrm' },
+];
+let avatarSeq = 0;
+async function loadAvatar(id) {
+  const av = AVATARS.find(x => x.id === id) || AVATARS[0]; const my = ++avatarSeq;
   try {
     const c = document.createElement('canvas'); if (!(c.getContext('webgl2') || c.getContext('webgl'))) return;
     const { createTeacher3D } = await import('./teacher3d.js');
-    const t3 = await createTeacher3D($('teacher3d'), 'assets/1-teacher.vrm');
-    $('teacher').style.display = 'none'; $('teacher3d').hidden = false; $('credit').hidden = false; teacher.impl = t3; window.__teacher3d = true;
-  } catch (e) { console.warn('3D teacher unavailable, using the drawn teacher:', e && e.message); }
-})();
+    $('teacher3d').classList.add('loading');
+    const t3 = await createTeacher3D($('teacher3d'), av.file);
+    if (my !== avatarSeq) { t3.dispose(); return; }
+    if (teacher.impl && teacher.impl.dispose) teacher.impl.dispose();
+    $('teacher').style.display = 'none'; $('teacher3d').hidden = false; teacher.impl = t3; window.__teacher3d = av.id;
+    $('credit').hidden = false; $('credit').innerHTML = `Teacher model "${av.name}" by <a href="https://vtubeme.com/free-vrm-avatars/${av.id}" target="_blank" rel="noopener">VTubeMe</a>, CC BY 4.0`;
+    try { localStorage.setItem('hometutor.avatar', av.id); } catch {}
+  } catch (e) { console.warn('3D teacher unavailable, keeping the current teacher:', e && e.message); }
+  finally { $('teacher3d').classList.remove('loading'); }
+}
+{ const sel = $('avatar'); let saved = 'ember'; try { saved = localStorage.getItem('hometutor.avatar') || 'ember'; } catch {} sel.value = AVATARS.some(x => x.id === saved) ? saved : 'ember'; sel.onchange = () => loadAvatar(sel.value); loadAvatar(sel.value); }
 const S = { chunks: [], data: [], idx: 0, sent: 0, run: 0, source: '', playing: false, started: false, titles: [], shown: new Set(), busy: false, testReady: false, qa: null };
 const lang = () => $('lang').value;
 const rate = () => parseFloat($('rate').value);
-const status = t => { $('status').textContent = t; };
+const LOADING = /^(Reading the whole|Preparing|Pacing|Planning|Thinking|Looking)/;
+const status = t => { $('status').textContent = t; const p = $('prep'); if (p) { p.hidden = !LOADING.test(t); $('prepText').textContent = t; } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let saveBusy = false;
 async function persist(nextSent, finished) {
@@ -184,7 +200,7 @@ async function planTopics() {
   try {
     const o = await chatJSON(outlinePrompt(lang(), digest.slice(0, 14000), n, full));
     // repair the AI's plan: order by start, make topics contiguous, cover parts 0..n-1 exactly once
-    let t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: Math.round(+x.from), to: Math.round(+x.to) })).filter(x => x.title && Number.isFinite(x.from) && Number.isFinite(x.to));
+    let t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: Math.round(+x.from), to: Math.round(+x.to), plan: (Array.isArray(x.plan) ? x.plan : []).slice(0, 4).map(s => String(s).slice(0, 90)) })).filter(x => x.title && Number.isFinite(x.from) && Number.isFinite(x.to));
     t.sort((x, y) => x.from - y.from);
     t = t.filter((x, k) => k === 0 || x.from > t[k - 1].from);
     t.forEach((x, k) => { x.from = k === 0 ? 0 : t[k - 1].to + 1; x.to = k === t.length - 1 ? n - 1 : Math.max(x.from, Math.min(t[k + 1].from - 1, n - 1)); });
@@ -194,7 +210,7 @@ async function planTopics() {
   } catch { /* fall back below */ }
   if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
   S.topics = topics; S.planFull = true; S.notRead = [];
-  say('s', (full ? `Read all ${n} parts in full before planning.` : `Read all ${n} parts in full, batch by batch, before planning.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ' Topics: ' + topics.map((t, i) => `${i + 1}. ${t.title}`).join('  |  '));
+  say('s', (full ? `Read all ${n} parts in full.` : `Read all ${n} parts in full, batch by batch.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ` Ready: ${topics.length} topic${topics.length > 1 ? 's' : ''}, taught one at a time. The lesson plan stays behind the scenes.`);
   return true;
 }
 
@@ -202,7 +218,7 @@ async function planTopics() {
 function loadChunk(i) {
   if (i >= S.chunks.length) return null;
   if (!S.data[i]) {
-    S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4), topicOf(i)?.title)).then(d => {
+    S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4), topicOf(i)?.title, topicOf(i)?.plan)).then(d => {
       if (!Array.isArray(d.sentences) || !d.sentences.length) throw new Error('AI returned no lesson');
       d.sentences = d.sentences.filter(s => s && s.text).slice(0, 16); return d;
     });
@@ -215,8 +231,8 @@ function showBoard(d, upTo) {
   d.sentences.slice(0, upTo + 1).forEach((s, k) => { if ((s.board || s.step) && S.shown.has(k)) addBoard(s.board, s.step); });
   renderDiagram($('diagram'), S.shown.has('dia') ? d.diagram : null);
 }
-function addBoard(t, step) {
-  const e = document.createElement('div'); e.className = 'item';
+function addBoard(t, step, cls) {
+  const e = document.createElement('div'); e.className = 'item' + (cls ? ' ' + cls : '');
   const norm = x => String(x || '').replace(/[\s*]/g, '').toLowerCase();
   if (t && !(step && step.math && norm(t) === norm(step.math))) { const m = document.createElement('div'); m.textContent = t; e.appendChild(m); }
   if (step && step.math) {
