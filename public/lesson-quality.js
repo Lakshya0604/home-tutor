@@ -1,3 +1,4 @@
+import { checkedNumericEqualities } from './arithmetic.js';
 import { checkDerivedStep } from './derived-step.js';
 import { checkedMotionGraph } from './motion-graph.js';
 import { checkedReferences } from './evidence.js';
@@ -34,7 +35,17 @@ export function validateDoubt(d, allowedParts, noEvidence, sourceParts = []) {
   for(const s of d.sentences || []) if(s.derived) s.derived = checkDerivedStep(s.derived, sourceParts);
   const text = (d.sentences || []).map(s => s.text || '').join(' ');
   if (noEvidence) { if (!/outside your notes|notes ke bahar|नोट्स के बाहर/i.test(text)) throw new Error('The answer did not disclose that it could not be confirmed from your notes. Please rephrase the question.'); }
-  else if (d.references?.length) { d.references = checkedReferences(d.references, sourceParts, d.sentences?.length || 0); const covered = new Set(d.references.flatMap(r=>r.sentences)); if ((d.sentences || []).some((s,i)=> /\d|[=²]/.test(s.text || '') && !covered.has(i) && !s.derived?.checked)) throw new Error('The numerical answer has source references missing for one or more calculation lines.'); }
+  else if (d.references?.length) { d.references = checkedReferences(d.references, sourceParts, d.sentences?.length || 0); const cited = d.references.map(r=>r.quote).join(' '); const premiseNumbers=new Set([...cited.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>Number(m[0])));
+    for (const sentence of d.sentences || []) {
+      if (/\d+\s*(?:m|metres?|meters?)\s*\+\s*\d+\s*(?:s|seconds?)\b/i.test(sentence.text || '')) throw new Error('This calculation adds incompatible distance and time units.');
+      const numeric=checkedNumericEqualities([sentence.text,sentence.step?.math].join(' '));
+      sentence.arithmeticChecks=numeric; sentence.supportStatus='Source excerpts supplied; arithmetic checks do not establish units or semantic support.';
+      if(sentence.derived?.checked)continue;
+      const sentenceText=String(sentence.text || '').replace(/\(part\s+\d+\)/gi,'');
+      const claims=[...sentenceText.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
+      const checkedResults=new Set(numeric.map(n=>n.result));
+      if(claims.some(n=>!premiseNumbers.has(n)&&!checkedResults.has(n)))throw new Error('The numerical answer uses a value not supplied by its cited premises or a checked calculation.');
+    } }
   else { const refs = [...text.matchAll(/part\s+(\d+)/gi)].map(m => +m[1]); if (!refs.length || refs.some(n => !allowedParts.includes(n))) throw new Error('The answer did not include valid source-part references. It has not been presented as verified. Please ask again.'); }
   return d;
 }
