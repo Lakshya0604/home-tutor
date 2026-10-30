@@ -65,3 +65,5 @@ header{flex-wrap:wrap}.hdr-right{flex-wrap:wrap;flex:1 1 auto;justify-content:fl
 #board .head{font-weight:700;color:var(--ink,#1c2540);margin-top:14px}
 @media (prefers-reduced-motion:reduce){.prep .spin,.prep .dots i{animation:none}}
 #teacher3d.loading{opacity:.6}
+
+.source-ref{padding:10px;border:1px solid #c9d3ea;border-radius:10px;margin:8px 0;background:#f4f7ff}.source-ref summary{cursor:pointer;color:#2f5bea}.source-ref blockquote{margin:10px 0;white-space:pre-wrap}.graph-caption{font-size:14px;line-height:1.5}
