@@ -12,7 +12,7 @@ const DEFAULTS = {
 export const providerDefaults = DEFAULTS;
 // Token-aware pacing for the shared free tier (Groq TPM limit 8000/min). Estimates are conservative; a real 429 still stops the call.
 const TPM_BUDGET = 6500; const sentLog = []; export const pacing = { onWait: null };
-const estTokens = m => Math.ceil(JSON.stringify(m).length / 3) + 800;
+const estTokens = m => Math.ceil(JSON.stringify(m).length / 3) + 5500;
 async function paced(est) {
   for (;;) {
     const now = Date.now(); while (sentLog.length && now - sentLog[0].t > 60000) sentLog.shift();
@@ -39,8 +39,8 @@ export async function chat(messages, { json = true, temperature = 0.4, signal } 
       clearTimeout(to);
       if (r.status === 401 && prov === 'server') { logout(); throw new Error('Session expired, please login again.'); }
       if (!r.ok) { const t = await r.text(); let ra = 0, lim = ''; try { const j0 = JSON.parse(t); ra = +j0.retryAfterSec || 0; lim = j0.limit || ''; } catch { /* plain text */ }
-        const er = new Error(r.status === 429 && lim ? `AI free limit reached (${lim})${ra ? ', Groq asks to wait about ' + ra + ' s' : ''}. Press Play/Resume after that.` : `AI provider error ${r.status}: ${t.slice(0, 160)}`); er.retryAfterSec = ra; if (r.status === 429) er.noRetry = true; throw er; }
-      const j = await r.json(); const out = j.choices?.[0]?.message?.content;
+        const er = new Error(r.status === 429 && lim ? `AI free limit reached (${lim})${ra ? ', Groq asks to wait about ' + ra + ' s' : ''}. Press Play/Resume after that.` : `AI provider error ${r.status}: ${t.slice(0, 160)}`); er.retryAfterSec = ra; er.noRetry = true; throw er; }
+      const j = await r.json(); if (j.choices?.[0]?.finish_reason === 'length') { const er = new Error('The AI response was cut short. This part was not taught. Press Resume to prepare it again.'); er.noRetry = true; throw er; } const out = j.choices?.[0]?.message?.content;
       if (!out) throw new Error('Empty AI reply');
       return out;
     } catch (e) { lastErr = e; if (e.noRetry || (e.name === 'AbortError' && signal?.aborted)) throw e; await new Promise(r => setTimeout(r, 1200 * (attempt + 1))); }
