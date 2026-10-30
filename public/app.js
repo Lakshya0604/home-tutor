@@ -1,3 +1,4 @@
+import { sectionTopics, checkActive } from './progressive.js';
 import { boardMath } from './board-math.js';
 import { renderReferences } from './evidence.js';
 import { validateCoverage, validateDoubt } from './lesson-quality.js';
@@ -7,7 +8,7 @@ import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chatJSON, pacing } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
 import { buildIndex, search } from './rag.js';
-import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt, summaryPrompt } from './prompts.js';
+import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
@@ -76,7 +77,7 @@ function fillVoices() {
   if (!saved && nat) $('voice').value = nat.value;
 }
 $('voice').onchange = () => localStorage.setItem('aiteacher.voice.' + voiceGroup(lang()), $('voice').value);
-$('lang').onchange = () => { fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
+$('lang').onchange = () => { if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
 speechSynthesis?.addEventListener?.('voiceschanged', fillVoices);
 if (localStorage.getItem('aiteacher.lang')) $('lang').value = localStorage.getItem('aiteacher.lang');
 { const r = localStorage.getItem('aiteacher.rate'); if (r && [...$('rate').options].some(o => o.value === r)) $('rate').value = r; }
@@ -155,7 +156,9 @@ $('btnVideo').onclick = () => {
   say('s warn', 'Video link noted, but a browser app cannot fetch a video\'s transcript reliably (YouTube blocks it). Open the video\'s "Show transcript", copy it, and paste it in the box - I will teach from that.');
 };
 
-function chunkText(t) {
+function chunkText(text) { return legacyChunks(text); }
+
+function legacyChunks(t) {
   const paras = t.replace(/\r/g, '').split(/\n\s*\n|\n(?=\s*(?:\d+[\.\)]|[-•*]|Unit|UNIT|Chapter))/).map(x => x.trim()).filter(Boolean);
   const out = []; let cur = '';
   for (const p of paras) {
@@ -168,68 +171,41 @@ function chunkText(t) {
 // ---------- topics ----------
 const topicOf = i => (S.topics || []).find(t => i >= t.from && i <= t.to);
 
-pacing.onWait = s => status(`Pacing for the free AI limit (about ${s} s)…`);
-async function planTopics() {
-  const n = S.chunks.length, full = S.source.length <= 9000;
-  let digest, readN = n, notRead = [];
-  if (full) digest = S.chunks.map((c, i) => `[PART ${i}]\n${c}`).join('\n\n');
-  else {
-    // staged reading: summarise consecutive batches (<= ~7000 chars) one call at a time, then plan from the summaries
-    const batches = []; let cur = [], len = 0;
-    S.chunks.forEach((c, i) => { if (cur.length && len + c.length > 7000) { batches.push(cur); cur = []; len = 0; } cur.push(i); len += c.length; });
-    if (cur.length) batches.push(cur);
-    const key = S.source.length + ':' + n; if (S.sumKey !== key) { S.sumKey = key; S.sumLines = new Array(n).fill(null); }
-    const MAXB = 40, lines = S.sumLines; notRead = [];
-    for (let b = 0; b < batches.length; b++) {
-      const ids = batches[b];
-      if (ids.every(i => lines[i])) continue;
-      if (b >= MAXB) { ids.forEach(i => notRead.push(i)); continue; }
-      status(`Reading the whole material… batch ${b + 1}/${Math.min(batches.length, MAXB)}`);
-      let m = new Map();
-      for (let attempt = 0; attempt < 1 && !ids.every(i => m.get(i)); attempt++) {
-        if (attempt) { status(`Reading the whole material… batch ${b + 1} retry (free AI limit, waiting)`); await new Promise(r => setTimeout(r, attempt * 12000)); }
-        try {
-          const o = await chatJSON(summaryPrompt(lang(), ids.map(i => `[PART ${i}]\n${S.chunks[i]}`).join('\n\n'), ids));
-          (o.parts || []).forEach(p => { const s = String(p.summary || '').slice(0, 260); if (s) m.set(+p.part, s); });
-        } catch { /* retry */ }
-      }
-      ids.forEach(i => { if (m.get(i)) lines[i] = m.get(i); else notRead.push(i); });
-    }
-    readN = n - notRead.length;
-    if (notRead.length) {
-      say('s', `Reading is not finished: ${readN} of ${n} parts read in full, parts ${notRead.join(', ')} still unread (free AI limit or error). Your finished reading is kept. Press Play to continue preparing; the lesson will not start on a partial reading.`);
-      return false;
-    }
-    digest = S.chunks.map((c, i) => `[PART ${i}] ${lines[i]}`).join('\n');
-  }
-  let topics = null;
-  try {
-    const o = await chatJSON(outlinePrompt(lang(), digest.slice(0, 14000), n, full));
-    // repair the AI's plan: order by start, make topics contiguous, cover parts 0..n-1 exactly once
-    let t = (o.topics || []).map(x => ({ title: String(x.title || '').slice(0, 80), from: Math.round(+x.from), to: Math.round(+x.to), plan: (Array.isArray(x.plan) ? x.plan : []).slice(0, 4).map(s => String(s).slice(0, 90)) })).filter(x => x.title && Number.isFinite(x.from) && Number.isFinite(x.to));
-    t.sort((x, y) => x.from - y.from);
-    t = t.filter((x, k) => k === 0 || x.from > t[k - 1].from);
-    t.forEach((x, k) => { x.from = k === 0 ? 0 : t[k - 1].to + 1; x.to = k === t.length - 1 ? n - 1 : Math.max(x.from, Math.min(t[k + 1].from - 1, n - 1)); });
-    t = t.filter(x => x.from <= n - 1 && x.to >= x.from);
-    if (t.length && t[t.length - 1].to < n - 1) t[t.length - 1].to = n - 1;
-    if (t.length) topics = t;
-  } catch (e) { say('s warn', 'Planning stopped: ' + e.message + '. Your source is kept. Press Resume when ready.'); return false; }
-  if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
-  S.topics = topics; S.planFull = true; S.notRead = [];
-  say('s', (full ? `Read all ${n} parts in full.` : `Read all ${n} parts in full, batch by batch.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ` Ready: ${topics.length} topic${topics.length > 1 ? 's' : ''}, taught one at a time. The lesson plan stays behind the scenes.`);
+let prepLabel = '';
+pacing.onWait = seconds => { if(S.playing && !S.background) status(`${prepLabel || 'Preparing next part'} - free AI spacing ${seconds} s remaining…`); };
+function planTopics() {
+  S.topics = sectionTopics(S.chunks); S.planFull = false; S.notRead = [];
+  say('s', `Indexed all ${S.chunks.length} source parts locally in ${S.topics.length} source section(s). AI preparation is progressive: later parts have not yet been read by the AI. Preparing part ${S.idx+1} first; one next part may prepare while teaching. Section boundaries follow explicit source headings where present; otherwise the original text remains one source section. No whole-book AI reading is implied.`);
   return true;
+}
+let preparation = null;
+function cancelPreparation() { preparation?.abort(); preparation=null; S.background=false; S.pending=null; }
+function prefetchNext(i, signal) {
+  if(i>=S.chunks.length || S.data[i] || S.pending?.index===i || S.prefetchError || signal.aborted) return;
+  S.background=true;
+  loadChunk(i,signal).catch(error=> {
+    if(signal.aborted) return;
+    S.prefetchError={ index:i, error };
+    say('s warn', `Next part preparation stopped: ${error.message}. The current prepared part can continue. No more background calls will be made; Resume can retry when ready.`);
+  }).finally(()=> { if(!signal.aborted) S.background=false; });
 }
 
 // ---------- lesson ----------
-function loadChunk(i) {
-  if (i >= S.chunks.length) return null;
-  if (!S.data[i]) {
-    S.data[i] = chatJSON(lessonPrompt(lang(), S.chunks[i], S.titles.slice(-4), topicOf(i)?.title, topicOf(i)?.plan)).then(d => {
-      return validateCoverage(d, S.chunks[i]);
-    });
-    S.data[i].catch(() => { S.data[i] = null; });
-  }
-  return S.data[i];
+function loadChunk(i, signal) {
+  checkActive(signal);
+  if(i>=S.chunks.length) return null;
+  if(S.data[i]?.sentences) return Promise.resolve(S.data[i]);
+  if(S.pending?.index===i && S.pending.signal===signal) return S.pending.promise;
+  const source=S.chunks[i], language=lang();
+  const pending={index:i, signal};
+  pending.promise=chatJSON(lessonPrompt(language, source, S.titles.slice(-4), topicOf(i)?.title, [...(topicOf(i)?.plan || []), 'Source heading map (navigation only, not evidence): '+S.topics.map(t=>t.title).join('; ').slice(0,1600), 'Teach the exact supplied source range only. A later source range has not been read; do not claim to have read or taught it.']),{signal}).then(raw=> {
+    checkActive(signal);
+    const data=validateCoverage(raw,source);
+    S.data[i]=data;
+    return data;
+  }).finally(()=> { if(S.pending===pending) S.pending=null; });
+  S.pending=pending;
+  return pending.promise;
 }
 function showBoard(d, upTo) {
   $('board').innerHTML = ''; $('boardTitle').textContent = d.title || 'Board';
@@ -248,17 +224,24 @@ function addBoard(t, step, cls) {
   $('board').appendChild(e); $('board').scrollTop = 1e9;
 }
 function setControls() {
-  $('btnPause').disabled = !S.playing; $('btnResume').disabled = S.playing || !S.started || S.finished;
-  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next topic' : 'Resume'; $('btnTest').disabled = !S.testReady;
+  $('btnStart').disabled = !!S.playing || !!S.busy;
+  $('btnPause').disabled = !S.playing && !S.pending; $('btnResume').disabled = S.playing || !S.started || S.finished;
+  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next section' : 'Resume'; $('btnTest').disabled = !S.testReady;
   $('progress').textContent = S.started ? (S.topicPause ? `Completed part ${Math.min(S.idx,S.chunks.length)} of ${S.chunks.length}` : `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}`) : '';
 }
 async function runLesson() {
+  if(S.playing) return;
+  if(!preparation || preparation.signal.aborted) preparation=new AbortController(); const signal=preparation.signal;
   const token = ++S.run; S.playing = true; S.topicPause = false; setControls();
   try {
-    if (!S.topics) { status('Reading the whole material…'); const okPlan = await planTopics(); if (token !== S.run) return; if (!okPlan) { S.playing = false; setControls(); status('Reading not finished - press Resume to continue'); return; } }
+    if (!S.topics) planTopics();
     while (S.idx < S.chunks.length) {
-      status('Preparing lesson part ' + (S.idx + 1) + '…');
-      const d = await loadChunk(S.idx);
+      checkActive(signal);
+      if(S.prefetchError?.index===S.idx) { const error=S.prefetchError.error; S.prefetchError=null; throw error; }
+      S.background=false;
+      prepLabel=`Preparing part ${S.idx+1} of ${S.chunks.length}`;
+      status(prepLabel+'…');
+      const d = await loadChunk(S.idx,signal);
       if (token !== S.run) return;
       // Prepare only the part being taught. No speculative provider calls.
       if (S.sent === 0) { S.shown = new Set(); S.titles.push(d.title || ''); if (!S.title0 && d.title) S.title0 = d.title; }
@@ -271,15 +254,18 @@ async function runLesson() {
         if ((S.sent === d.sentences.length - 1 || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = s.speak && lang() === 'hinglish' ? s.speak : s.text;
         say('t', s.text);
+        // Queue only the next source range once playback of this prepared part begins.
         await speakText(tx);
+        // A successful first spoken line establishes playback before bounded prefetch.
+        if(token===S.run) prefetchNext(S.idx+1,signal);
         if (token !== S.run) return;
         persist(S.sent + 1);
       }
       S.idx++; S.sent = 0; persist(0);
       const tp = topicOf(S.idx - 1);
       if (tp && S.idx > tp.to && S.idx < S.chunks.length) {
-        S.playing = false; S.topicPause = true; teacher.gesture('rest'); status('Topic finished - paused'); setControls();
-        say('s', `Topic "${tp.title}" is finished. Ask any doubt (type or by voice), then press Next topic.`);
+        S.playing = false; S.topicPause = true; teacher.gesture('rest'); status('Source section finished - paused'); setControls();
+        say('s', `Source section "${tp.title}" is finished. Ask any doubt (type or by voice), then press Next section.`);
         return;
       }
       setControls();
@@ -289,31 +275,32 @@ async function runLesson() {
     await sleep(1500); teacher.gesture('rest');
   } catch (e) {
     if (token !== S.run) return;
-    S.playing = false; setControls(); teacher.gesture('rest'); status('Stopped');
+    cancelPreparation(); S.playing = false; setControls(); teacher.gesture('rest'); status('Stopped');
     say('s warn', 'Lesson stopped: ' + e.message + '  (Press Resume to retry, or check AI settings.)');
   }
 }
 $('btnStart').onclick = () => {
+  if(S.playing || S.busy) return;
   const t = $('src').value.trim();
   if (t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
   if (!$('srcInfo').textContent.includes('PDF')) $('srcInfo').textContent = `Source loaded: ${t.length} characters.`;
   if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
-  stopAudio(); S.run++;
+  cancelPreparation(); stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
-  Object.assign(S, { source: capped, chunks: chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, lessonId: undefined, title0: '' });
+  Object.assign(S, { source: capped, chunks: chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, prefetchError:null, lessonId: undefined, title0: '' });
   $('log').innerHTML = ''; $('board').innerHTML = ''; $('diagram').innerHTML = '';
   say('s', `Loaded ${capped.length} characters in ${S.chunks.length} parts. Teaching in ${$('lang').selectedOptions[0].textContent}, voice: ${$('voice').selectedOptions[0]?.textContent || 'none'}.`);
   runLesson();
 };
-$('btnPause').onclick = () => { S.run++; S.playing = false; stopAudio(); teacher.speaking(false); teacher.gesture('rest'); status('Paused'); setControls(); };
-$('btnResume').onclick = () => { $('doubtBox').hidden = true; runLesson(); };
+$('btnPause').onclick = () => { cancelPreparation(); S.run++; S.playing = false; stopAudio(); teacher.speaking(false); teacher.gesture('rest'); status('Paused'); setControls(); };
+$('btnResume').onclick = () => { if(S.playing || S.busy) return; S.prefetchError=null; $('doubtBox').hidden = true; runLesson(); };
 $('btnDoubt').onclick = () => { $('btnPause').click(); $('doubtBox').hidden = false; $('doubtInput').focus(); say('s', 'Paused. Ask your doubt, then press Resume to continue from the same line.'); };
 $('btnAsk').onclick = async () => {
   const q = $('doubtInput').value.trim(); if (!q) return; $('doubtInput').value = '';
   say('u', q); S.busy = true; setControls(); status('Thinking about your doubt…');
   try {
     const cur = Math.min(S.idx, S.chunks.length - 1);
-    const rk = S.ragKey === S.source.length + ':' + S.chunks.length ? S.rag : (S.ragKey = S.source.length + ':' + S.chunks.length, S.rag = buildIndex(S.chunks));
+    const rk = S.ragSource === S.source ? S.rag : (S.ragSource = S.source, S.rag = buildIndex(S.chunks));
     const all = search(rk, q + ' ' + (topicOf(cur)?.title || ''), 5);
     const hits = all.filter(h => h.part !== cur).slice(0, 3);
     const noEvidence = all.length === 0;
@@ -332,16 +319,17 @@ $('btnAsk').onclick = async () => {
       await speakText(s.speak && lang() === 'hinglish' ? s.speak : s.text);
     }
     if (tok === S.run) { S.playing = false; teacher.gesture('rest'); }
-    const cd = S.topicPause ? null : await S.data[S.idx]?.catch(() => null); if (cd) showBoard(cd, S.sent);
+    const cd = S.topicPause ? null : S.data[S.idx]; if (cd) showBoard(cd, S.sent);
     say('s', 'Doubt answered. Press Resume to continue the lesson, or ask another doubt.');
   } catch (e) { say('s warn', 'Could not answer: ' + e.message); }
   S.busy = false; S.playing = false; setControls(); status('Paused');
 };
 $('doubtInput').onkeydown = e => { if (e.key === 'Enter') $('btnAsk').click(); };
 function listen() {
+  cancelPreparation();
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!R) { say('s warn', 'Voice input is not supported in this browser (Chrome or Edge on a computer work best). Type your doubt instead.'); $('doubtBox').hidden = false; return; }
-  if (S.playing) $('btnPause').click(); else { stopAudio(); }
+  if (S.playing) $('btnPause').click(); else { cancelPreparation(); stopAudio(); }
   $('doubtBox').hidden = false;
   const r = new R(); r.lang = lang() === 'english' ? 'en-IN' : 'hi-IN'; r.interimResults = false; let got = false;
   r.onresult = e => { got = true; const t = e.results[0][0].transcript; $('doubtInput').value = t; status('Heard: ' + t.slice(0, 60)); $('btnAsk').click(); };
@@ -395,9 +383,10 @@ requireLogin().then(async u => {
       const b = document.createElement('button'); b.className = 'msg s'; b.style.cursor = 'pointer';
       b.textContent = (l.finished ? '✔ ' : '▶ ') + (l.title || 'Untitled') + (l.finished ? ' (finished)' : ` (part ${l.chunkIndex + 1}, line ${l.sentIndex + 1})`);
       b.onclick = async () => {
-        const f = await getLesson(l._id); stopAudio(); S.run++;
+        if(S.playing || S.busy) return;
+        const f = await getLesson(l._id); cancelPreparation(); stopAudio(); S.run++;
         $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
-        Object.assign(S, { source: f.source, chunks: chunkText(f.source), topics: null, topicPause: false, data: [], idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
+        Object.assign(S, { source: f.source, chunks: chunkText(f.source), topics: null, topicPause: false, data: [], prefetchError:null, idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
         $('board').innerHTML = ''; $('diagram').innerHTML = '';
         say('s', `Resuming "${f.title}" at part ${f.chunkIndex + 1}, line ${f.sentIndex + 1}.`);
         if (f.finished) { setControls(); status('Lesson finished'); } else runLesson();
