@@ -1,3 +1,4 @@
+import { renderMotionGraph } from './motion-graph.js';
 // Renders {type:'flow',title,steps[]} as SVG and {type:'table',title,headers,rows} as an HTML table.
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function wrap(text, n) {
@@ -8,6 +9,7 @@ function wrap(text, n) {
 export function renderDiagram(host, d) {
   host.innerHTML = '';
   if (!d || typeof d !== 'object') return;
+  if (d.type === 'motion' && Number.isFinite(d.v) && Number.isFinite(d.s)) { renderMotionGraph(host, d); return; }
   const title = d.title ? `<div class="board-title" style="margin-top:12px">${esc(d.title)}</div>` : '';
   if (d.type === 'table' && Array.isArray(d.headers) && Array.isArray(d.rows)) {
     const th = d.headers.map(h => `<th style="border:1px solid #c9d3ea;padding:4px 8px;color:#2f5bea">${esc(h)}</th>`).join('');
