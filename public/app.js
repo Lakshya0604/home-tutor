@@ -1,3 +1,7 @@
+import {pdfTopicLines} from './pdf-lines.js';
+import {validateSnapshot,validateTopicState,TOPIC_PROMPT_VERSION} from './topic-snapshot.js';
+import {materialMeta,validateMaterial,visibleUnitList} from './material.js';
+import {prepareTopic} from './topic-teaching.js';
 import { sectionTopics, checkActive } from './progressive.js';
 import { boardMath } from './board-math.js';
 import { renderReferences } from './evidence.js';
@@ -48,9 +52,11 @@ let saveBusy = false;
 async function persist(nextSent, finished) {
   if (!S.source || saveBusy) return; saveBusy = true;
   try {
-    const j = await saveProgress({ id: S.lessonId, title: S.title0 || S.source.slice(0, 60), lang: lang(), source: S.source, chunkIndex: S.idx, sentIndex: nextSent ?? S.sent, finished: !!finished });
+    const payload={ ...(S.material?{material:S.material,topicSnapshot:S.data[S.idx]?.provenance?{version:TOPIC_PROMPT_VERSION,language:lang(),unitId:S.idx,raw:S.data[S.idx].strictRaw}:null}:{}), id: S.lessonId, title: S.title0 || S.source.slice(0, 60), lang: lang(), source: S.source, chunkIndex: S.idx, sentIndex: nextSent ?? S.sent, finished: !!finished };
+    if(S.material){validateTopicState(payload,S.material,lang(),payload.topicSnapshot);if(new TextEncoder().encode(JSON.stringify(payload)).length>280000)throw Error('Topic progress exceeds safe save size; keep this tab open or use smaller topics.');}
+    const j=await saveProgress(payload);
     if (j.id) S.lessonId = j.id;
-  } catch { /* progress saving is best effort */ } finally { saveBusy = false; }
+  } catch(e) { if(S.material)say('s warn','Topic progress was not saved: '+e.message+'. Keep this tab open; exact reload resume is not guaranteed.'); } finally { saveBusy = false; }
 }
 
 // ---------- chat log ----------
@@ -117,13 +123,14 @@ $('btnSettings').onclick = () => { loadSettings(); $('settings').showModal(); };
 $('saveSettings').onclick = () => saveCfg({ provider: $('provider').value, model: $('model').value.trim(), baseUrl: $('baseUrl').value.trim(), apiKey: $('apiKey').value.trim() });
 
 // ---------- source loading ----------
+let lastPdfText=null;
 async function readPdf(file) {
   const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
   const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  let text = '';
+  let text = '', topicText='';
   const pages = Math.min(doc.numPages, 60);
-  for (let i = 1; i <= pages; i++) { const c = await (await doc.getPage(i)).getTextContent(); text += c.items.map(x => x.str).join(' ') + '\n\n'; }
+  for (let i = 1; i <= pages; i++) { const c = await (await doc.getPage(i)).getTextContent(); text += c.items.map(x => x.str).join(' ') + '\n\n'; topicText+=pdfTopicLines(c.items)+'\n\n'; }
   let ocr = false;
   if (text.replace(/\s/g, '').length < 200) { // scanned PDF: free in-browser OCR (Tesseract, Hindi + English), first 12 pages
     ocr = true; text = '';
@@ -139,7 +146,7 @@ async function readPdf(file) {
     await w.terminate();
     return { text, pages: n, total: doc.numPages, ocr };
   }
-  return { text, pages, total: doc.numPages, ocr };
+  return { text, topicText, pages, total: doc.numPages, ocr };
 }
 $('pdf').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
@@ -147,7 +154,7 @@ $('pdf').onchange = async e => {
   try {
     const r = await readPdf(f);
     if (r.text.replace(/\s/g, '').length < (r.ocr ? 20 : 200)) { $('srcInfo').textContent = 'No text could be read from this PDF, even with OCR. Paste the text instead.'; return; }
-    $('src').value = r.text.trim(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
+    lastPdfText={notes:r.text.trim(),topics:(r.topicText||r.text).trim()};$('src').value=($('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics);previewMaterial(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
     if (r.total > r.pages) { const m = `Only the first ${r.pages} of ${r.total} pages were read${r.ocr ? ' (OCR limit)' : ''}. Paste the remaining pages separately to learn them.`; $('srcInfo').textContent += ' ' + m; say('s warn', m); }
   } catch (err) { $('srcInfo').textContent = 'Could not read PDF: ' + err.message; }
 };
@@ -174,6 +181,7 @@ const topicOf = i => (S.topics || []).find(t => i >= t.from && i <= t.to);
 let prepLabel = '';
 pacing.onWait = seconds => { if(S.playing && !S.background) status(`${prepLabel || 'Preparing next part'} - free AI spacing ${seconds} s remaining…`); };
 function planTopics() {
+  if(S.material) {S.topics=S.material.units.map(u=>({title:u.title,from:u.id,to:u.id,plan:[]}));say('s','Topics provided by you. Explanations are generated teacher knowledge, not facts quoted from your topic list. Only the current topic is prepared first; one next topic may prepare during speech.');return true;}
   S.topics = sectionTopics(S.chunks); S.planFull = false; S.notRead = [];
   say('s', `Indexed all ${S.chunks.length} source parts locally in ${S.topics.length} source section(s). AI preparation is progressive: later parts have not yet been read by the AI. Preparing part ${S.idx+1} first; one next part may prepare while teaching. Section boundaries follow explicit source headings where present; otherwise the original text remains one source section. No whole-book AI reading is implied.`);
   return true;
@@ -198,7 +206,7 @@ function loadChunk(i, signal) {
   if(S.pending?.index===i && S.pending.signal===signal) return S.pending.promise;
   const source=S.chunks[i], language=lang();
   const pending={index:i, signal};
-  pending.promise=prepareLesson({language, source, previousTitles:S.titles.slice(-4), topic:topicOf(i)?.title, plan:[...(topicOf(i)?.plan || []), 'Source heading map (navigation only, not evidence): '+S.topics.map(t=>t.title).join('; ').slice(0,1600), 'Teach the exact supplied source range only. A later source range has not been read; do not claim to have read or taught it.'],chat,chatJSON,options:{signal}}).then(data=> {
+  pending.promise=(S.material?prepareTopic(S.material.units[i],language,chat,{signal}):prepareLesson({language, source, previousTitles:S.titles.slice(-4), topic:topicOf(i)?.title, plan:[...(topicOf(i)?.plan || []), 'Source heading map (navigation only, not evidence): '+S.topics.map(t=>t.title).join('; ').slice(0,1600), 'Teach the exact supplied source range only. A later source range has not been read; do not claim to have read or taught it.'],chat,chatJSON,options:{signal}})).then(data=> {
     checkActive(signal);
     S.data[i]=data;
     return data;
@@ -225,7 +233,7 @@ function addBoard(t, step, cls) {
 function setControls() {
   $('btnStart').disabled = !!S.playing || !!S.busy;
   $('btnPause').disabled = !S.playing && !S.pending; $('btnResume').disabled = S.playing || !S.started || S.finished;
-  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next section' : 'Resume'; $('btnTest').disabled = !S.testReady;
+  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next section' : 'Resume'; $('btnTest').disabled = !S.testReady || !!S.material;
   $('progress').textContent = S.started ? (S.topicPause ? `Completed part ${Math.min(S.idx,S.chunks.length)} of ${S.chunks.length}` : `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}`) : '';
 }
 async function runLesson() {
@@ -244,6 +252,7 @@ async function runLesson() {
       if (token !== S.run) return;
       // Prepare only the part being taught. No speculative provider calls.
       if (S.sent === 0) { S.shown = new Set(); S.titles.push(d.title || ''); if (!S.title0 && d.title) S.title0 = d.title; }
+      if(S.material && S.sent===0)say('s','Generated teacher explanation. Local plan: '+d.plan.join(' → '));
       showBoard(d, S.sent);
       for (; S.sent < d.sentences.length; S.sent++) {
         if (token !== S.run) return;
@@ -270,7 +279,7 @@ async function runLesson() {
       setControls();
     }
     S.playing = false; S.finished = true; S.testReady = true; teacher.gesture('wave'); status('Lesson finished'); setControls(); persist(0, true);
-    say('s', 'Lesson finished. Press "Unit test" when ready.');
+    say('s', S.material?'Topic teaching finished. Topic-mode assessments are not yet implemented; no source-grounded test is claimed.':'Lesson finished. Press "Unit test" when ready.');
     await sleep(1500); teacher.gesture('rest');
   } catch (e) {
     if (token !== S.run) return;
@@ -281,14 +290,16 @@ async function runLesson() {
 $('btnStart').onclick = () => {
   if(S.playing || S.busy) return;
   const t = $('src').value.trim();
-  if (t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
+  if ($('materialMode').value==='notes' && t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
   if (!$('srcInfo').textContent.includes('PDF')) $('srcInfo').textContent = `Source loaded: ${t.length} characters.`;
   if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
+  let material=null;try{material=materialMeta(t,$('materialMode').value);}catch(e){say('s warn',e.message);return;}
   cancelPreparation(); stopAudio(); S.run++;
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
-  Object.assign(S, { source: capped, chunks: chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, prefetchError:null, lessonId: undefined, title0: '' });
+  Object.assign(S, { source: capped, material, chunks: material?material.units.map(u=>u.text):chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, prefetchError:null, lessonId: undefined, title0: '' });
   $('log').innerHTML = ''; $('board').innerHTML = ''; $('diagram').innerHTML = '';
   say('s', `Loaded ${capped.length} characters in ${S.chunks.length} parts. Teaching in ${$('lang').selectedOptions[0].textContent}, voice: ${$('voice').selectedOptions[0]?.textContent || 'none'}.`);
+  if(material)say('s','Teaching outline (check original input if a PDF heading or problem is split incorrectly):\n'+visibleUnitList(material));
   runLesson();
 };
 $('btnPause').onclick = () => { cancelPreparation(); S.run++; S.playing = false; stopAudio(); teacher.speaking(false); teacher.gesture('rest'); status('Paused'); setControls(); };
@@ -302,12 +313,12 @@ $('btnAsk').onclick = async () => {
     const rk = S.ragSource === S.source ? S.rag : (S.ragSource = S.source, S.rag = buildIndex(S.chunks));
     const all = search(rk, q + ' ' + (topicOf(cur)?.title || ''), 5);
     const hits = all.filter(h => h.part !== cur).slice(0, 3);
-    const noEvidence = all.length === 0;
+    const noEvidence = !!S.material || all.length === 0;
     const parts = hits.map(h => ({ part: h.part + 1, text: S.chunks[h.part].slice(0, 1400) }));
     if (noEvidence) say('s', 'Keyword search found no matching part in your document. That does not prove the notes lack the answer (different wording can be missed). The answer below could not be confirmed from your notes and is marked as outside your notes.');
     else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
     else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
-    const d = await prepareDoubt({language:lang(),question:q,source:S.chunks[cur] || S.source,parts,currentPart:cur+1,noEvidence,chat,chatJSON});
+    const d = await prepareDoubt({language:lang(),question:S.material?q+' [This is generated-topic teaching. The supplied entry is only a topic, not detailed factual notes. Answer as general teacher knowledge, outside provided notes; do not cite heading as factual evidence.]':q,source:S.chunks[cur] || S.source,parts:S.material?[]:parts,currentPart:cur+1,noEvidence,chat,chatJSON});
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
     if (d.references?.length) { const refHost = document.createElement('div'); $('log').append(refHost); renderReferences(refHost, d.references); }
@@ -385,7 +396,12 @@ requireLogin().then(async u => {
         if(S.playing || S.busy) return;
         const f = await getLesson(l._id); cancelPreparation(); stopAudio(); S.run++;
         $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
-        Object.assign(S, { source: f.source, chunks: chunkText(f.source), topics: null, topicPause: false, data: [], prefetchError:null, idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
+        let material;try{material=validateMaterial(f.source,f.material);}catch(e){say('s warn','Cannot resume: '+e.message);return;}
+        let snapshot;try{snapshot=validateSnapshot(f.topicSnapshot,material,f.lang);validateTopicState(f,material,f.lang,snapshot);}catch(e){say('s warn','Saved topic response invalid: '+e.message);return;}
+        if(material && f.sentIndex>0 && (!snapshot || snapshot.unitId!==f.chunkIndex)){say('s warn','This topic has no exact saved response. Start a new topic rather than silently skip a regenerated explanation.');return;}
+        $('materialMode').value=material?.mode||'notes';previewMaterial();
+        Object.assign(S, { source: f.source, material, chunks: material?material.units.map(u=>u.text):chunkText(f.source), topics: null, topicPause: false, data: [], prefetchError:null, idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
+        if(snapshot)S.data[snapshot.unitId]=snapshot.teaching;
         $('board').innerHTML = ''; $('diagram').innerHTML = '';
         say('s', `Resuming "${f.title}" at part ${f.chunkIndex + 1}, line ${f.sentIndex + 1}.`);
         if (f.finished) { setControls(); status('Lesson finished'); } else runLesson();
@@ -395,3 +411,6 @@ requireLogin().then(async u => {
   } catch { /* offline or server waking: skip */ }
 });
 $('btnLogout').onclick = logout;
+
+function previewMaterial(){try{const m=materialMeta($('src').value,$('materialMode').value);$('materialPreview').textContent=m?'Generated teacher knowledge, not quoted notes. Check/edit the source if this outline is wrong:\n'+visibleUnitList(m):'Detailed notes: original source-grounded teaching and saved lesson format.';}catch(e){$('materialPreview').textContent=e.message;}}
+$('materialMode').addEventListener('change',()=>{if(lastPdfText&&[lastPdfText.notes,lastPdfText.topics].includes($('src').value))$('src').value=$('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics;previewMaterial();});$('src').addEventListener('input',previewMaterial);previewMaterial();
