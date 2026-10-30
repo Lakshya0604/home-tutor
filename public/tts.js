@@ -41,24 +41,33 @@ function ensureAudio() {
   } catch { /* analyser optional */ }
 }
 // Play a Blob; resolves when finished or stopped. onLevel(0..1) follows the real audio loudness.
+let activePlayback = null;
+export const playbackStatus = { phase:'idle', currentTime:0, duration:null, contextState:null };
 export function playBlob(blob, rate, onLevel) {
   ensureAudio();
-  if (ctx?.state === 'suspended') ctx.resume();
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(blob);
-    audioEl.src = url; audioEl.playbackRate = rate || 1; audioEl.preservesPitch = true;
-    const buf = analyser ? new Uint8Array(analyser.fftSize) : null;
-    let raf;
-    const tick = () => {
-      if (buf) { analyser.getByteTimeDomainData(buf); let sum = 0; for (const v of buf) { const d = (v - 128) / 128; sum += d * d; } onLevel?.(Math.min(1, Math.sqrt(sum / buf.length) * 4.5)); }
-      raf = requestAnimationFrame(tick);
-    };
-    const done = () => { window.__onClipEnd?.(); cancelAnimationFrame(raf); onLevel?.(0); audioEl.onended = audioEl.onerror = audioEl.onpause = null; URL.revokeObjectURL(url); resolve(); };
-    audioEl.onended = done; audioEl.onerror = done; audioEl.onpause = () => { if (audioEl.ended) return; done(); };
-    audioEl.play().then(tick).catch(done);
+  return new Promise((resolve,reject) => {
+    const url=URL.createObjectURL(blob); let settled=false, raf, poll, lastTime=0, lastProgress=Date.now();
+    const cleanup=()=>{clearInterval(poll);cancelAnimationFrame(raf);audioEl.onended=audioEl.onerror=audioEl.onpause=null;URL.revokeObjectURL(url);onLevel?.(0);activePlayback=null;window.__onClipEnd?.();};
+    const finish=(error,cancelled=false)=>{if(settled)return;settled=true;cleanup();playbackStatus.phase=cancelled?'cancelled':error?'failed':'ended';if(error)reject(error);else resolve({cancelled});};
+    activePlayback={cancel:()=>{finish(null,true);audioEl.pause();}};
+    audioEl.src=url;audioEl.playbackRate=rate||1;audioEl.preservesPitch=true;
+    playbackStatus.phase='starting';
+    const buf=analyser?new Uint8Array(analyser.fftSize):null;
+    const tick=()=>{if(settled)return;if(buf){analyser.getByteTimeDomainData(buf);let sum=0;for(const v of buf){const d=(v-128)/128;sum+=d*d;}onLevel?.(Math.min(1,Math.sqrt(sum/buf.length)*4.5));}raf=requestAnimationFrame(tick);};
+    audioEl.onended=()=>finish();
+    audioEl.onerror=()=>finish(new Error('Audio playback failed. The lesson is paused at this line; choose a working voice and press Resume.'));
+    audioEl.onpause=()=>{if(!settled&&!audioEl.ended)finish(new Error('Audio playback paused unexpectedly. Press Resume when ready.'));};
+    // This timer starts AFTER synthesis/download has completed. Never skips a line.
+    poll=setInterval(()=>{
+      if(settled)return;
+      const t=Number(audioEl.currentTime)||0;playbackStatus.currentTime=t;playbackStatus.duration=Number.isFinite(audioEl.duration)?audioEl.duration:null;playbackStatus.contextState=ctx?.state||null;
+      if(t>lastTime+.02){lastTime=t;lastProgress=Date.now();playbackStatus.phase='playing';}
+      if(Date.now()-lastProgress>30000){const e=new Error('Audio stopped making progress for 30 seconds. This line was not completed. Check the voice or browser audio, then press Resume.');finish(e);audioEl.pause();}
+    },1000);
+    (async()=>{try{if(ctx?.state==='suspended')await ctx.resume();if(settled)return;await audioEl.play();if(!settled)tick();}catch{finish(new Error('The browser could not start audio playback. Allow audio, choose a working voice, then press Resume.'));}})();
   });
 }
-export function stopAudio() { if (audioEl) { audioEl.pause(); } window.speechSynthesis?.cancel?.(); }
+export function stopAudio() { if(activePlayback)activePlayback.cancel();else if(audioEl)audioEl.pause();window.speechSynthesis?.cancel?.(); }
 export function speakDevice(text, voiceURI, lang, rate) {
   return new Promise((resolve, reject) => {
     if (!window.speechSynthesis) return reject(new Error('This browser has no speech synthesis. Open Home Tutor in Microsoft Edge or Chrome on a computer.'));
