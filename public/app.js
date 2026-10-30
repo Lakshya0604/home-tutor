@@ -1,8 +1,9 @@
 import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
-import { cfg, saveCfg, providerDefaults, chatJSON } from './llm.js';
+import { cfg, saveCfg, providerDefaults, chatJSON, pacing } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
+import { buildIndex, search } from './rag.js';
 import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt, outlinePrompt, summaryPrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
@@ -145,6 +146,7 @@ function chunkText(t) {
 // ---------- topics ----------
 const topicOf = i => (S.topics || []).find(t => i >= t.from && i <= t.to);
 
+pacing.onWait = s => status(`Pacing for the free AI limit (about ${s} s)…`);
 async function planTopics() {
   const n = S.chunks.length, full = S.source.length <= 9000;
   let digest, readN = n, notRead = [];
@@ -192,8 +194,8 @@ async function planTopics() {
   } catch { /* fall back below */ }
   if (!topics) { topics = []; for (let i = 0; i < n; i += 2) topics.push({ title: 'Topic ' + (topics.length + 1), from: i, to: Math.min(i + 1, n - 1) }); S.planFallback = true; }
   S.topics = topics; S.planFull = true; S.notRead = [];
-  return true;
   say('s', (full ? `Read all ${n} parts in full before planning.` : `Read all ${n} parts in full, batch by batch, before planning.`) + (S.planFallback ? ' (AI topic planning failed twice, so parts were grouped automatically in pairs.)' : '') + ' Topics: ' + topics.map((t, i) => `${i + 1}. ${t.title}`).join('  |  '));
+  return true;
 }
 
 // ---------- lesson ----------
@@ -288,7 +290,13 @@ $('btnAsk').onclick = async () => {
   const q = $('doubtInput').value.trim(); if (!q) return; $('doubtInput').value = '';
   say('u', q); S.busy = true; setControls(); status('Thinking about your doubt…');
   try {
-    const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[Math.min(S.idx, S.chunks.length - 1)] || S.source, S.source));
+    const cur = Math.min(S.idx, S.chunks.length - 1);
+    const rk = S.ragKey === S.source.length + ':' + S.chunks.length ? S.rag : (S.ragKey = S.source.length + ':' + S.chunks.length, S.rag = buildIndex(S.chunks));
+    const hits = search(rk, q + ' ' + (topicOf(cur)?.title || ''), 4).filter(h => h.part !== cur).slice(0, 3);
+    const parts = hits.map(h => ({ part: h.part + 1, text: S.chunks[h.part].slice(0, 1400) }));
+    if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
+    else say('s', 'Keyword search found no other matching part in the document; answering from the part being taught.');
+    const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1));
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
     S.playing = true; const tok = ++S.run; setControls();
