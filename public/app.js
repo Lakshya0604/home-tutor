@@ -1,3 +1,4 @@
+import { boardMath } from './board-math.js';
 import { renderReferences } from './evidence.js';
 import { validateCoverage, validateDoubt } from './lesson-quality.js';
 import { createTeacher } from './teacher.js';
@@ -237,6 +238,7 @@ function showBoard(d, upTo) {
 }
 function addBoard(t, step, cls) {
   const e = document.createElement('div'); e.className = 'item' + (cls ? ' ' + cls : '');
+  t=boardMath(t); if(step)step={...step,math:boardMath(step.math)};
   const norm = x => String(x || '').replace(/[\s*]/g, '').toLowerCase();
   if (t && !(step && step.math && norm(t) === norm(step.math))) { const m = document.createElement('div'); m.textContent = t; e.appendChild(m); }
   if (step && step.math) {
@@ -248,7 +250,7 @@ function addBoard(t, step, cls) {
 function setControls() {
   $('btnPause').disabled = !S.playing; $('btnResume').disabled = S.playing || !S.started || S.finished;
   $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next topic' : 'Resume'; $('btnTest').disabled = !S.testReady;
-  $('progress').textContent = S.started ? `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}` : '';
+  $('progress').textContent = S.started ? (S.topicPause ? `Completed part ${Math.min(S.idx,S.chunks.length)} of ${S.chunks.length}` : `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}`) : '';
 }
 async function runLesson() {
   const token = ++S.run; S.playing = true; S.topicPause = false; setControls();
@@ -326,7 +328,7 @@ $('btnAsk').onclick = async () => {
     S.playing = true; const tok = ++S.run; setControls();
     for (const s of sents) {
       if (tok !== S.run) break;
-      teacher.gesture(s.gesture || 'explain'); if(s.derived?.checked) addBoard('Derived calculation: ' + s.derived.operation + ' = ' + s.derived.result + ' (arithmetic checked from quoted inputs)'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
+      teacher.gesture(s.gesture || 'explain'); if (!s.derived?.checked && (s.step?.math || /[=²]/.test(s.text || ''))) addBoard(s.arithmeticChecks?.length ? 'Numeric equality checked only; units and explanation not automatically verified.' : 'Explanation/calculation: not automatically checked.'); if(s.derived?.checked) addBoard('Derived calculation: ' + s.derived.operation + ' = ' + s.derived.result + ' (arithmetic checked from quoted inputs)'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
       await speakText(s.speak && lang() === 'hinglish' ? s.speak : s.text);
     }
     if (tok === S.run) { S.playing = false; teacher.gesture('rest'); }
