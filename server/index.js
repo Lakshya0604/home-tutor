@@ -32,7 +32,7 @@ app.post('/api/llm', auth, llmLimit, async (q, r) => {
   if (!GROQ_API_KEY) return r.status(503).json({ error: 'AI is not configured on the server' });
   const { messages, json = true, temperature = 0.4 } = q.body || {};
   if (!Array.isArray(messages) || JSON.stringify(messages).length > 60000) return r.status(400).json({ error: 'Bad request' });
-  const body = { model: GROQ_MODEL, messages, temperature }; if (json) body.response_format = { type: 'json_object' };
+  const body = { model: GROQ_MODEL, messages, temperature, max_completion_tokens: 5500, ...(GROQ_MODEL.startsWith('openai/gpt-oss-') ? { reasoning_effort: 'low' } : {}) }; if (json) body.response_format = { type: 'json_object' };
   try {
     const x = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_API_KEY }, body: JSON.stringify(body) });
     const t = await x.text(); if (!x.ok) console.error('groq', x.status, t.slice(0, 300));
