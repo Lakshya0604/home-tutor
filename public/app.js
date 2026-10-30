@@ -1,3 +1,4 @@
+import {createProgressQueue} from './progress-queue.js';
 import {pdfTopicLines} from './pdf-lines.js';
 import {validateSnapshot,validateTopicState,TOPIC_PROMPT_VERSION} from './topic-snapshot.js';
 import {materialMeta,validateMaterial,visibleUnitList} from './material.js';
@@ -43,20 +44,20 @@ async function loadAvatar(id) {
 }
 { const sel = $('avatar'); let saved = 'ember'; try { saved = localStorage.getItem('hometutor.avatar') || 'ember'; } catch {} sel.value = AVATARS.some(x => x.id === saved) ? saved : 'ember'; sel.onchange = () => loadAvatar(sel.value); loadAvatar(sel.value); }
 const S = { chunks: [], data: [], idx: 0, sent: 0, run: 0, source: '', playing: false, started: false, titles: [], shown: new Set(), busy: false, testReady: false, qa: null };
+let lessonSelection=0;
 const lang = () => $('lang').value;
 const rate = () => parseFloat($('rate').value);
 const LOADING = /^(Reading the whole|Preparing|Pacing|Planning|Thinking|Looking)/;
 const status = t => { $('status').textContent = t; const p = $('prep'); if (p) { p.hidden = !LOADING.test(t); $('prepText').textContent = t; } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let saveBusy = false;
+const progressQueue=createProgressQueue(saveProgress,{onSaved(j){if(j.id)S.lessonId=j.id;},onError(e,payload){say('s warn','Progress was not saved: '+e.message+'. Keep this tab open; reload may resume an earlier line.');}});
 async function persist(nextSent, finished) {
-  if (!S.source || saveBusy) return; saveBusy = true;
+  if (!S.source) return;
   try {
     const payload={ ...(S.material?{material:S.material,topicSnapshot:S.data[S.idx]?.provenance?{version:TOPIC_PROMPT_VERSION,language:lang(),unitId:S.idx,raw:S.data[S.idx].strictRaw}:null}:{}), id: S.lessonId, title: S.title0 || S.source.slice(0, 60), lang: lang(), source: S.source, chunkIndex: S.idx, sentIndex: nextSent ?? S.sent, finished: !!finished };
     if(S.material){validateTopicState(payload,S.material,lang(),payload.topicSnapshot);if(new TextEncoder().encode(JSON.stringify(payload)).length>280000)throw Error('Topic progress exceeds safe save size; keep this tab open or use smaller topics.');}
-    const j=await saveProgress(payload);
-    if (j.id) S.lessonId = j.id;
-  } catch(e) { if(S.material)say('s warn','Topic progress was not saved: '+e.message+'. Keep this tab open; exact reload resume is not guaranteed.'); } finally { saveBusy = false; }
+    await progressQueue.enqueue(payload);
+  } catch(e) { if(S.material)say('s warn','Topic progress was not saved: '+e.message+'. Keep this tab open; exact reload resume is not guaranteed.'); }
 }
 
 // ---------- chat log ----------
@@ -83,9 +84,9 @@ function fillVoices() {
   if (!saved && nat) $('voice').value = nat.value;
 }
 $('voice').onchange = () => localStorage.setItem('aiteacher.voice.' + voiceGroup(lang()), $('voice').value);
-$('lang').onchange = () => { invalidateAssessment(); if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
+$('lang').onchange = () => { lessonSelection++;invalidateAssessment(); if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
 speechSynthesis?.addEventListener?.('voiceschanged', fillVoices);
-if (localStorage.getItem('aiteacher.lang')) $('lang').value = localStorage.getItem('aiteacher.lang');
+{ const saved=localStorage.getItem('aiteacher.lang'); $('lang').value=[...$('lang').options].some(o=>o.value===saved)?saved:'hindi'; }
 { const r = localStorage.getItem('aiteacher.rate'); if (r && [...$('rate').options].some(o => o.value === r)) $('rate').value = r; }
 $('rate').onchange = () => localStorage.setItem('aiteacher.rate', $('rate').value);
 fillVoices();
@@ -273,7 +274,7 @@ async function runLesson() {
         if (token !== S.run) return;
         persist(S.sent + 1);
       }
-      S.idx++; S.sent = 0; persist(0);
+      S.idx++; S.sent = 0; if(S.idx<S.chunks.length)persist(0);
       const tp = topicOf(S.idx - 1);
       if (tp && S.idx > tp.to && S.idx < S.chunks.length) {
         S.playing = false; S.topicPause = true; teacher.gesture('rest'); status('Source section finished - paused'); setControls();
@@ -288,17 +289,17 @@ async function runLesson() {
   } catch (e) {
     if (token !== S.run) return;
     cancelPreparation(); S.playing = false; setControls(); teacher.gesture('rest'); status('Stopped');
-    say('s warn', 'Lesson stopped: ' + e.message + '  (Press Resume to retry, or check AI settings.)');
+    say('s warn', 'Lesson stopped: ' + e.message + (e.noRetry?' No further call will run automatically. Resume starts a new attempt only when you choose.':' Press Resume when ready, or check AI settings.'));
   }
 }
 $('btnStart').onclick = () => {
-  invalidateAssessment();if(S.playing || S.busy) return;
+  invalidateAssessment();if(S.playing || S.busy) return;lessonSelection++;
   const t = $('src').value.trim();
   if ($('materialMode').value==='notes' && t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
   if (!$('srcInfo').textContent.includes('PDF')) $('srcInfo').textContent = `Source loaded: ${t.length} characters.`;
   if (!$('voice').value) { say('s warn', 'No voice is available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (it has natural online Hindi voices), or switch the language to English.'); return; }
   let material=null;try{material=materialMeta(t,$('materialMode').value);}catch(e){say('s warn',e.message);return;}
-  cancelPreparation(); stopAudio(); S.run++;
+  cancelPreparation(); stopAudio(); S.run++; progressQueue.reset();
   const capped = t.slice(0, 60000); if (t.length > 60000) say('s warn', 'Text is very long; teaching the first 60,000 characters only.');
   Object.assign(S, { source: capped, material, chunks: material?material.units.map(u=>u.text):chunkText(capped), topics: null, topicPause: false, data: [], idx: 0, sent: 0, titles: [], shown: new Set(), started: true, finished: false, testReady: false, qa: null, prefetchError:null, lessonId: undefined, title0: '' });
   $('log').innerHTML = ''; $('board').innerHTML = ''; $('diagram').innerHTML = '';
@@ -450,12 +451,13 @@ requireLogin().then(async u => {
       b.textContent = (l.finished ? '✔ ' : '▶ ') + (l.title || 'Untitled') + (l.finished ? ' (finished)' : ` (part ${l.chunkIndex + 1}, line ${l.sentIndex + 1})`);
       b.onclick = async () => {
         invalidateAssessment();if(S.playing || S.busy) return;
-        const f = await getLesson(l._id); invalidateAssessment();cancelPreparation(); stopAudio(); S.run++;
+        const selection=++lessonSelection;let f;try{f=await getLesson(l._id);}catch(e){if(selection===lessonSelection)say('s warn','Could not load saved lesson: '+e.message);return;}if(selection!==lessonSelection)return;invalidateAssessment();cancelPreparation(); stopAudio(); S.run++;
         $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
         let material;try{material=validateMaterial(f.source,f.material);}catch(e){say('s warn','Cannot resume: '+e.message);return;}
         let snapshot;try{snapshot=validateSnapshot(f.topicSnapshot,material,f.lang);validateTopicState(f,material,f.lang,snapshot);}catch(e){say('s warn','Saved topic response invalid: '+e.message);return;}
         if(material && f.sentIndex>0 && (!snapshot || snapshot.unitId!==f.chunkIndex)){say('s warn','This topic has no exact saved response. Start a new topic rather than silently skip a regenerated explanation.');return;}
         $('materialMode').value=material?.mode||'notes';previewMaterial();
+        progressQueue.reset(f._id);
         Object.assign(S, { source: f.source, material, chunks: material?material.units.map(u=>u.text):chunkText(f.source), topics: null, topicPause: false, data: [], prefetchError:null, idx: f.chunkIndex, sent: f.sentIndex, titles: [], shown: new Set(), started: true, finished: !!f.finished, testReady: !!f.finished, qa: null, lessonId: f._id, title0: f.title });
         if(snapshot)S.data[snapshot.unitId]=snapshot.teaching;
         $('board').innerHTML = ''; $('diagram').innerHTML = '';
@@ -466,7 +468,7 @@ requireLogin().then(async u => {
     }
   } catch { /* offline or server waking: skip */ }
 });
-$('btnLogout').onclick = ()=>{invalidateAssessment();logout();};
+$('btnLogout').onclick = ()=>{lessonSelection++;progressQueue.reset();invalidateAssessment();logout();};
 
 function previewMaterial(){try{const m=materialMeta($('src').value,$('materialMode').value);$('materialPreview').textContent=m?'Generated teacher knowledge, not quoted notes. Check/edit the source if this outline is wrong:\n'+visibleUnitList(m):'Detailed notes: original source-grounded teaching and saved lesson format.';}catch(e){$('materialPreview').textContent=e.message;}}
-$('materialMode').addEventListener('change',()=>{invalidateAssessment();if(lastPdfText&&[lastPdfText.notes,lastPdfText.topics].includes($('src').value))$('src').value=$('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics;previewMaterial();});$('src').addEventListener('input',()=>{invalidateAssessment();previewMaterial();});previewMaterial();
+$('materialMode').addEventListener('change',()=>{lessonSelection++;invalidateAssessment();if(lastPdfText&&[lastPdfText.notes,lastPdfText.topics].includes($('src').value))$('src').value=$('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics;previewMaterial();});$('src').addEventListener('input',()=>{lessonSelection++;invalidateAssessment();previewMaterial();});previewMaterial();
