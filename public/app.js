@@ -1,3 +1,4 @@
+import { renderReferences } from './evidence.js';
 import { validateCoverage, validateDoubt } from './lesson-quality.js';
 import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
@@ -84,6 +85,8 @@ fillVoices();
 let progressNote = null;
 const onProg = p => { if (p && p.total) status(`Downloading voice model ${Math.round(100 * p.loaded / p.total)}% (one time, then cached)`); };
 async function speakText(text) {
+  text = String(text).replace(/\*(?:waves?|nods?|points?|smiles?|gestures?)\*/gi, '').replace(/\[(?:waves?|nods?|points?|smiles?|gestures?)\]/gi, '').trim();
+  if (!text) return;
   const v = $('voice').value;
   if (!v) throw new Error('No voice available for this language in this browser. Open Home Tutor in Microsoft Edge on a computer (natural online voices), or switch the language to English.');
   teacher.speaking(true);
@@ -263,7 +266,7 @@ async function runLesson() {
         const s = d.sentences[S.sent];
         teacher.gesture(['explain', 'point', 'wave', 'think', 'nod'].includes(s.gesture) ? s.gesture : 'explain');
         if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(s.board, s.step); }
-        if (S.sent === d.sentences.length - 1 && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
+        if ((S.sent === d.sentences.length - 1 || d.diagram?.explanation?.includes(S.sent) || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = s.speak && lang() === 'hinglish' ? s.speak : s.text;
         say('t', s.text);
         await speakText(tx);
@@ -316,13 +319,14 @@ $('btnAsk').onclick = async () => {
     if (noEvidence) say('s', 'Keyword search found no matching part in your document. That does not prove the notes lack the answer (different wording can be missed). The answer below could not be confirmed from your notes and is marked as outside your notes.');
     else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
     else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
-    const d = validateDoubt(await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence)), [cur + 1, ...parts.map(p => p.part)], noEvidence);
+    const d = validateDoubt(await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence)), [cur + 1, ...parts.map(p => p.part)], noEvidence, [{part:cur+1,text:S.chunks[cur] || S.source}, ...parts]);
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
+    if (d.references?.length) { const refHost = document.createElement('div'); $('log').append(refHost); renderReferences(refHost, d.references); }
     S.playing = true; const tok = ++S.run; setControls();
     for (const s of sents) {
       if (tok !== S.run) break;
-      teacher.gesture(s.gesture || 'explain'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
+      teacher.gesture(s.gesture || 'explain'); if(s.derived?.checked) addBoard('Derived calculation: ' + s.derived.operation + ' = ' + s.derived.result + ' (arithmetic checked from quoted inputs)'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
       await speakText(s.speak && lang() === 'hinglish' ? s.speak : s.text);
     }
     if (tok === S.run) { S.playing = false; teacher.gesture('rest'); }
