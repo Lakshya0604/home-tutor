@@ -45,4 +45,4 @@ export function validateTopic(raw,unit,language) {
 export async function prepareTopic(unit,language,chat,options) {
  const result=await chat(topicMessages(unit,language),options);let raw;try{raw=JSON.parse(result)}catch{throw Error('Topic teaching returned invalid strictJSON; not taught.');}
  return validateTopic(raw,unit,language);
-                                                                                                                                                                                                  }
+}
