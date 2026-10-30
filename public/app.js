@@ -1,14 +1,14 @@
 import { sectionTopics, checkActive } from './progressive.js';
 import { boardMath } from './board-math.js';
 import { renderReferences } from './evidence.js';
-import { validateCoverage, validateDoubt } from './lesson-quality.js';
+import { prepareLesson, prepareDoubt, spokenSentence } from './teaching-language.js';
 import { createTeacher } from './teacher.js';
 import { renderDiagram } from './diagram.js';
 import { requireLogin, logout, user } from './auth.js';
-import { cfg, saveCfg, providerDefaults, chatJSON, pacing } from './llm.js';
+import { cfg, saveCfg, providerDefaults, chat, chatJSON, pacing } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
 import { buildIndex, search } from './rag.js';
-import { lessonPrompt, doubtPrompt, testPrompt, gradePrompt } from './prompts.js';
+import { testPrompt, gradePrompt } from './prompts.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
@@ -198,9 +198,8 @@ function loadChunk(i, signal) {
   if(S.pending?.index===i && S.pending.signal===signal) return S.pending.promise;
   const source=S.chunks[i], language=lang();
   const pending={index:i, signal};
-  pending.promise=chatJSON(lessonPrompt(language, source, S.titles.slice(-4), topicOf(i)?.title, [...(topicOf(i)?.plan || []), 'Source heading map (navigation only, not evidence): '+S.topics.map(t=>t.title).join('; ').slice(0,1600), 'Teach the exact supplied source range only. A later source range has not been read; do not claim to have read or taught it.']),{signal}).then(raw=> {
+  pending.promise=prepareLesson({language, source, previousTitles:S.titles.slice(-4), topic:topicOf(i)?.title, plan:[...(topicOf(i)?.plan || []), 'Source heading map (navigation only, not evidence): '+S.topics.map(t=>t.title).join('; ').slice(0,1600), 'Teach the exact supplied source range only. A later source range has not been read; do not claim to have read or taught it.'],chat,chatJSON,options:{signal}}).then(data=> {
     checkActive(signal);
-    const data=validateCoverage(raw,source);
     S.data[i]=data;
     return data;
   }).finally(()=> { if(S.pending===pending) S.pending=null; });
@@ -252,7 +251,7 @@ async function runLesson() {
         teacher.gesture(['explain', 'point', 'wave', 'think', 'nod'].includes(s.gesture) ? s.gesture : 'explain');
         if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(s.board, s.step); }
         if ((S.sent === d.sentences.length - 1 || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
-        const tx = s.speak && lang() === 'hinglish' ? s.speak : s.text;
+        const tx = spokenSentence(s,lang());
         say('t', s.text);
         // Queue only the next source range once playback of this prepared part begins.
         await speakText(tx);
@@ -308,7 +307,7 @@ $('btnAsk').onclick = async () => {
     if (noEvidence) say('s', 'Keyword search found no matching part in your document. That does not prove the notes lack the answer (different wording can be missed). The answer below could not be confirmed from your notes and is marked as outside your notes.');
     else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
     else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
-    const d = validateDoubt(await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence)), [cur + 1, ...parts.map(p => p.part)], noEvidence, [{part:cur+1,text:S.chunks[cur] || S.source}, ...parts]);
+    const d = await prepareDoubt({language:lang(),question:q,source:S.chunks[cur] || S.source,parts,currentPart:cur+1,noEvidence,chat,chatJSON});
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
     if (d.references?.length) { const refHost = document.createElement('div'); $('log').append(refHost); renderReferences(refHost, d.references); }
@@ -316,7 +315,7 @@ $('btnAsk').onclick = async () => {
     for (const s of sents) {
       if (tok !== S.run) break;
       teacher.gesture(s.gesture || 'explain'); if (!s.derived?.checked && (s.step?.math || /[=²]/.test(s.text || ''))) addBoard(s.arithmeticChecks?.length ? 'Numeric equality checked only; units and explanation not automatically verified.' : 'Explanation/calculation: not automatically checked.'); if(s.derived?.checked) addBoard('Derived calculation: ' + s.derived.operation + ' = ' + s.derived.result + ' (arithmetic checked from quoted inputs)'); if (s.board || s.step) addBoard(s.board, s.step); say('t', s.text);
-      await speakText(s.speak && lang() === 'hinglish' ? s.speak : s.text);
+      await speakText(spokenSentence(s,lang()));
     }
     if (tok === S.run) { S.playing = false; teacher.gesture('rest'); }
     const cd = S.topicPause ? null : S.data[S.idx]; if (cd) showBoard(cd, S.sent);
