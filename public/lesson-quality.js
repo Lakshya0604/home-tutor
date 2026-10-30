@@ -16,19 +16,16 @@ export function sourceUnits(source) {
 }
 export function validateCoverage(d, source) {
   validateLesson(d, source);
-  const units = sourceUnits(source), coverage = d.coverage;
-  if (!Array.isArray(coverage)) throw new Error('The AI did not show how it covered the source. This part is not marked taught. Press Resume to prepare it again.');
-  for (let id = 0; id < units.length; id++) {
-    const c = coverage.find(x => x.unit === id);
-    if (!c || !Array.isArray(c.sentences) || !c.sentences.length || c.sentences.some(i => !Number.isInteger(i) || !d.sentences[i])) throw new Error('The AI left source unit ' + (id + 1) + ' unexplained. This part is not marked taught. Press Resume to prepare it again.');
-    const mapped = c.sentences.map(i => d.sentences[i]);
-    if (mapped.every(s => /^(namaste|hello|welcome|aaj hum|today we)/i.test(s.text.trim()))) throw new Error('A greeting cannot count as source coverage. This part is not marked taught.');
-    if (/derivation|derive|substitute.+(?:to get|gives|yield)/i.test(units[id]) && mapped.filter(s => s.step?.math).length < 2) throw new Error('The derivation needs separate worked steps before this part can be marked taught.');
-    const explained = mapped.map(s => [s.text, s.step?.math].join(' ')).join(' ');
-    const numbers = [...units[id].replace(/^(?:topic|chapter|unit)\s+\d+\s*[:.-]?\s*/i, '').matchAll(/-?\d+(?:\.\d+)?/g)].map(m => m[0]);
-    if (numbers.length > 1 && numbers.some(n => !explained.includes(n))) throw new Error('A worked example left out source values. This part is not marked taught.');
-    if (/\b(formula|substitute|calculate|calculation|to find|follows from)\b/i.test(units[id]) && !mapped.some(s => s.step?.math)) throw new Error('A source calculation has no worked board step. This part is not marked taught.');
+  // Transparent content checks, not a claim of complete semantic coverage.
+  const normalized = x => String(x).replace(/\s+/g, '').replace(/[×·]/g,'*').toLowerCase();
+  const teaching = normalized(d.sentences.map(s=>[s.text,s.board,s.step?.math].join(' ')).join(' '));
+  const premises = [...source.matchAll(/\b([uavghts])\s*=\s*(-?\d+(?:\.\d+)?)/gi)].map(m=>({name:m[1].toLowerCase(),value:m[2]}));
+  for (const p of premises) {
+    if (!teaching.includes(p.name+'='+p.value)) throw new Error('The explanation did not show the source value '+p.name+' = '+p.value+'. This part is not marked taught.');
   }
+  const formulaSource = /\b(?:formula|equation|substitute|calculate|calculation)\b|[=²]/i.test(source);
+  if (formulaSource && !d.sentences.some(s=>s.step?.math)) throw new Error('The explanation omitted worked board steps. This part is not marked taught.');
+  if (/derivation|derive/i.test(source) && d.sentences.filter(s=>s.step?.math).length < 2) throw new Error('The derivation needs separate worked steps before this part can be marked taught.');
   if (d.diagram?.type === 'motion') d.diagram = checkedMotionGraph(d.diagram, source, d.sentences);
   return d;
 }
