@@ -57,6 +57,10 @@
       <button id="btnAsk">Ask</button>
     </div>
     <div id="composer">
+      <label for="materialMode">Material type</label>
+      <select id="materialMode"><option value="notes">Detailed notes / original notes flow</option><option value="syllabus">Topics and subtopics / syllabus</option><option value="topic">Single topic (for example: What is LLM?)</option></select>
+      <div class="note">Choose topic mode for headings only. Explanations are generated teacher knowledge; original numerical givens are kept. Hindi speech uses an English board.</div>
+      <pre id="materialPreview" class="note" style="white-space:pre-wrap;max-height:180px;overflow:auto" aria-live="polite"></pre>
       <textarea id="src" placeholder="Paste notes / unit text / syllabus here…  (or attach a PDF below)"></textarea>
       <div class="row">
         <label class="file">PDF<input type="file" id="pdf" accept="application/pdf"></label>
