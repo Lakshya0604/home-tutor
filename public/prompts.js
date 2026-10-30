@@ -11,10 +11,10 @@ export function lessonPrompt(lang, chunk, prevTitles, topic) {
     { role: 'user', content: 'SOURCE CHUNK:\n' + chunk },
   ];
 }
-export function doubtPrompt(lang, doubt, chunk, parts, curIdx) {
+export function doubtPrompt(lang, doubt, chunk, parts, curIdx, noEvidence) {
   const ctx = (parts || []).map(x => `[PART ${x.part}]\n${x.text}`).join('\n\n');
   return [
-    { role: 'system', content: `You are the same teacher. The student paused the lesson with a doubt. ${langRule(lang)}\nAnswer using the SOURCE PARTS first (they were found by keyword search over the whole document, so they may not include everything). When you use a part, name it like "(part 3)". If the source parts do not cover it, say so in one sentence, then answer briefly from general knowledge and mark it "(outside your notes)". 3 to 6 short sentences, give one simple example. End with a short understanding check ("Does that make sense?" in English, "Samajh aaya?" in Hinglish, "समझ आया?" in Hindi) in the chosen language only. Board notes optional.\n${FORMAT}` },
+    { role: 'system', content: `You are the same teacher. The student paused the lesson with a doubt. ${langRule(lang)}\nAnswer using the SOURCE PARTS first (they were found by keyword search over the whole document, so they may not include everything). When you use a part, name it like "(part 3)". If the source parts do not cover it, say so in one sentence, then answer briefly from general knowledge and mark it "(outside your notes)".${noEvidence ? ' IMPORTANT: keyword search found NO part of the source related to this question. Your first sentence MUST say clearly that the student\'s notes do not seem to cover this. Do not present anything as coming from the notes, give at most a short general answer marked "(outside your notes)", and suggest the student check the source or rephrase.' : ''} 3 to 6 short sentences, give one simple example. End with a short understanding check ("Does that make sense?" in English, "Samajh aaya?" in Hinglish, "समझ आया?" in Hindi) in the chosen language only. Board notes optional.\n${FORMAT}` },
     { role: 'user', content: `CURRENT PART (${curIdx}):\n${chunk}\n\nSOURCE PARTS:\n${ctx || '(none found)'}\n\nSTUDENT DOUBT:\n${doubt}` },
   ];
 }
