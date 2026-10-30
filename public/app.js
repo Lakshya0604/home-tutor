@@ -12,7 +12,7 @@ import { requireLogin, logout, user } from './auth.js';
 import { cfg, saveCfg, providerDefaults, chat, chatJSON, pacing } from './llm.js';
 import { saveProgress, listLessons, getLesson } from './progress.js';
 import { buildIndex, search } from './rag.js';
-import { testPrompt, gradePrompt } from './prompts.js';
+import {newAssessmentRun,prepareSectionTest,prepareSectionGrade,recordSectionScore} from './assessment.js';
 import { PIPER, voiceGroup, sampleText, synth, playBlob, stopAudio, deviceVoices, speakDevice } from './tts.js';
 
 const $ = id => document.getElementById(id);
@@ -83,7 +83,7 @@ function fillVoices() {
   if (!saved && nat) $('voice').value = nat.value;
 }
 $('voice').onchange = () => localStorage.setItem('aiteacher.voice.' + voiceGroup(lang()), $('voice').value);
-$('lang').onchange = () => { if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
+$('lang').onchange = () => { invalidateAssessment(); if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
 speechSynthesis?.addEventListener?.('voiceschanged', fillVoices);
 if (localStorage.getItem('aiteacher.lang')) $('lang').value = localStorage.getItem('aiteacher.lang');
 { const r = localStorage.getItem('aiteacher.rate'); if (r && [...$('rate').options].some(o => o.value === r)) $('rate').value = r; }
@@ -92,7 +92,8 @@ fillVoices();
 
 let progressNote = null;
 const onProg = p => { if (p && p.total) status(`Downloading voice model ${Math.round(100 * p.loaded / p.total)}% (one time, then cached)`); };
-async function speakText(text) {
+async function speakText(text, isCurrent=()=>true) {
+  if(!isCurrent())return;
   text = String(text).replace(/\*(?:waves?|nods?|points?|smiles?|gestures?)\*/gi, '').replace(/\[(?:waves?|nods?|points?|smiles?|gestures?)\]/gi, '').trim();
   if (!text) return;
   const v = $('voice').value;
@@ -102,12 +103,15 @@ async function speakText(text) {
     if (v.startsWith('dev:')) { status('Speaking (device voice)'); await speakDevice(text, v.slice(4), lang() === 'english' ? 'en-IN' : 'hi-IN', rate()); }
     else {
       status('Preparing voice…');
-      const blob = await synth(text, v.slice(6), onProg);
+      const blob=await synth(text,v.slice(6),p=>{if(isCurrent())onProg(p);});
+      if(!isCurrent())return;
       status('Speaking…');
+      if(!isCurrent())return;
       window.__onClip?.(blob);
-      await playBlob(blob, rate(), l => teacher.mouthLevel(l));
+      if(!isCurrent())return;
+      await playBlob(blob,rate(),l=>{if(isCurrent())teacher.mouthLevel(l);});
     }
-  } finally { teacher.mouthLevel(null); teacher.speaking(false); status(S.playing ? 'Teaching…' : 'Paused'); }
+  } finally { if(isCurrent()){teacher.mouthLevel(null);teacher.speaking(false);status(S.playing?'Teaching…':'Paused');} }
 }
 $('btnPreview').onclick = async () => {
   stopAudio(); teacher.gesture('explain');
@@ -154,7 +158,7 @@ $('pdf').onchange = async e => {
   try {
     const r = await readPdf(f);
     if (r.text.replace(/\s/g, '').length < (r.ocr ? 20 : 200)) { $('srcInfo').textContent = 'No text could be read from this PDF, even with OCR. Paste the text instead.'; return; }
-    lastPdfText={notes:r.text.trim(),topics:(r.topicText||r.text).trim()};$('src').value=($('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics);previewMaterial(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
+    invalidateAssessment();lastPdfText={notes:r.text.trim(),topics:(r.topicText||r.text).trim()};$('src').value=($('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics);previewMaterial(); $('srcInfo').textContent = `${r.ocr ? 'OCR (may contain mistakes): ' : ''}PDF read: ${r.pages}${r.total > r.pages ? ' of ' + r.total : ''} pages, ${r.text.length} characters. Check the text below before starting.`;
     if (r.total > r.pages) { const m = `Only the first ${r.pages} of ${r.total} pages were read${r.ocr ? ' (OCR limit)' : ''}. Paste the remaining pages separately to learn them.`; $('srcInfo').textContent += ' ' + m; say('s warn', m); }
   } catch (err) { $('srcInfo').textContent = 'Could not read PDF: ' + err.message; }
 };
@@ -233,7 +237,7 @@ function addBoard(t, step, cls) {
 function setControls() {
   $('btnStart').disabled = !!S.playing || !!S.busy;
   $('btnPause').disabled = !S.playing && !S.pending; $('btnResume').disabled = S.playing || !S.started || S.finished;
-  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next section' : 'Resume'; $('btnTest').disabled = !S.testReady || !!S.material;
+  $('btnDoubt').disabled = !S.started || S.busy; $('btnVoiceAsk').disabled = !S.started || S.busy; $('btnResume').textContent = S.topicPause ? 'Next section' : 'Resume'; $('btnTest').disabled = !S.testReady || !!S.material || S.busy;
   $('progress').textContent = S.started ? (S.topicPause ? `Completed part ${Math.min(S.idx,S.chunks.length)} of ${S.chunks.length}` : `Part ${Math.min(S.idx + 1, S.chunks.length)} of ${S.chunks.length}`) : '';
 }
 async function runLesson() {
@@ -288,7 +292,7 @@ async function runLesson() {
   }
 }
 $('btnStart').onclick = () => {
-  if(S.playing || S.busy) return;
+  invalidateAssessment();if(S.playing || S.busy) return;
   const t = $('src').value.trim();
   if ($('materialMode').value==='notes' && t.length < 40) { say('s warn', 'Paste some notes first (at least a few lines).'); return; }
   if (!$('srcInfo').textContent.includes('PDF')) $('srcInfo').textContent = `Source loaded: ${t.length} characters.`;
@@ -302,7 +306,7 @@ $('btnStart').onclick = () => {
   if(material)say('s','Teaching outline (check original input if a PDF heading or problem is split incorrectly):\n'+visibleUnitList(material));
   runLesson();
 };
-$('btnPause').onclick = () => { cancelPreparation(); S.run++; S.playing = false; stopAudio(); teacher.speaking(false); teacher.gesture('rest'); status('Paused'); setControls(); };
+$('btnPause').onclick = () => { invalidateAssessment(); cancelPreparation(); S.run++; S.playing = false; stopAudio(); teacher.speaking(false); teacher.gesture('rest'); status('Paused'); setControls(); };
 $('btnResume').onclick = () => { if(S.playing || S.busy) return; S.prefetchError=null; $('doubtBox').hidden = true; runLesson(); };
 $('btnDoubt').onclick = () => { $('btnPause').click(); $('doubtBox').hidden = false; $('doubtInput').focus(); say('s', 'Paused. Ask your doubt, then press Resume to continue from the same line.'); };
 $('btnAsk').onclick = async () => {
@@ -349,37 +353,89 @@ function listen() {
 }
 $('btnMic').onclick = listen; $('btnVoiceAsk').onclick = listen;
 
-// ---------- unit test ----------
-$('btnTest').onclick = async () => {
-  S.run++; stopAudio(); S.playing = false; setControls();
-  say('s', 'Preparing the unit test…'); status('Preparing test…'); S.busy = true; setControls();
-  try {
-    const t = await chatJSON(testPrompt(lang(), S.source)); const qs = (t.questions || []).slice(0, 6);
-    if (!qs.length) throw new Error('No questions generated');
-    S.qa = qs; const box = document.createElement('div'); box.className = 'msg t'; box.innerHTML = '<b>Unit test</b> - answer in any of Hindi / English / Hinglish.';
-    qs.forEach((q, i) => { const w = document.createElement('div'); w.className = 'q'; const l = document.createElement('div'); l.textContent = `Q${i + 1}. ${q.q}`; const a = document.createElement('textarea'); a.id = 'ans' + i; w.append(l, a); box.appendChild(w); });
-    const b = document.createElement('button'); b.className = 'primary'; b.id = 'btnGrade'; b.textContent = 'Submit answers'; box.appendChild(b); $('log').appendChild(box); $('log').scrollTop = 1e9;
-    b.onclick = () => grade(box, b);
-    teacher.gesture('point'); status('Test ready'); await speakText(lang() === 'english' ? 'Your unit test is ready. Answer each question, then submit.' : (lang() === 'hindi' ? 'आपका यूनिट टेस्ट तैयार है। हर सवाल का जवाब लिखिए और फिर सबमिट कीजिए।' : 'आपका unit test तैयार है। हर सवाल का answer लिखिए और फिर submit कीजिए।'));
-    teacher.gesture('rest');
-  } catch (e) { say('s warn', 'Could not create the test: ' + e.message); }
-  S.busy = false; setControls();
-};
-async function grade(box, btn) {
-  const qa = S.qa.map((q, i) => ({ q: q.q, key: q.key, student: ($('ans' + i).value || '').trim() || '(no answer)' }));
-  btn.disabled = true; btn.textContent = 'Checking…'; status('Checking your answers…');
-  try {
-    const g = await chatJSON(gradePrompt(lang(), qa, S.source)); const res = g.results || [];
-    let tot = 0; const rem = [];
-    const out = document.createElement('div'); out.className = 'msg t';
-    qa.forEach((x, i) => { const r = res[i] || { score: 0, feedback: '' }; tot += +r.score || 0; const d = document.createElement('div'); d.className = 'res'; d.textContent = `Q${i + 1}: ${r.score >= 1 ? '✅' : r.score > 0 ? '🟡' : '❌'} ${r.feedback || ''}${r.remedial ? '\n\n' + ({ english: 'Let\'s understand: ', hindi: 'समझो: ' }[$('lang').value] || 'Samjho: ') + r.remedial : ''}`; out.appendChild(d); if (r.remedial) rem.push(r.remedial); });
-    const h = document.createElement('div'); h.innerHTML = `<b>Score: ${tot} / ${qa.length}</b> - ${g.summary || ''}`; out.prepend(h);
-    $('log').appendChild(out); $('log').scrollTop = 1e9; btn.textContent = 'Submitted';
-    S.playing = true; const tok = ++S.run; setControls();
-    for (const r of rem.slice(0, 4)) { if (tok !== S.run) break; teacher.gesture('explain'); $('board').innerHTML = ''; $('boardTitle').textContent = 'Revision'; addBoard(r.length > 140 ? (r.slice(0, 140).replace(/[^.!?।,;]*$/, '').trim() || r.slice(0, 140).replace(/\s\S*$/, '')) + (/[.!?।]$/.test(r.slice(0, 140).replace(/[^.!?।,;]*$/, '').trim()) ? '' : '…') : r); await speakText(r); }
-    S.playing = false; teacher.gesture('rest'); status('Done'); setControls();
-  } catch (e) { btn.disabled = false; btn.textContent = 'Submit answers'; say('s warn', 'Could not check answers: ' + e.message); }
+// ---------- on-demand section assessments (notes only) ----------
+let assessment=null;
+function disableAssessmentControls(root){root?.querySelectorAll('button,textarea').forEach(e=>e.disabled=true);}
+function invalidateAssessment(){
+ const old=assessment;if(!old)return;
+ old.controller?.abort();old.generation++;old.active=false;
+ for(const root of old.roots)disableAssessmentControls(root);
+ if(old.pickerLabel)old.pickerLabel.textContent='Previous section tests (inactive after lesson, input or language change).';
+ if(old.operation||old.hearing){stopAudio();S.busy=false;S.playing=false;}
+ assessment=null;setControls();
 }
+function assessmentMatches(run,section,generation){
+ return !!run&&run===assessment&&run.active&&run.source===S.source&&run.language===lang()&&run.mode===$('materialMode').value&&run.chunks===JSON.stringify(S.chunks)&&!S.material&&(!section||run.sections[section.index]===section)&& (generation===undefined||generation===run.generation);
+}
+function refreshPicker(run){
+ if(!assessmentMatches(run))return;
+ run.pickerLabel.textContent=`Section tests: ${run.completed.size} of ${run.sections.length} completed in this session. Each test covers one exact teaching section, not the whole unit. This assessment progress is not saved across reloads.`;
+ run.pickerButtons.forEach((button,i)=>{button.textContent=`${run.completed.has(i)?'Retake':'Test'} section ${i+1}`;button.disabled=!!run.operation||run.hearing;});
+}
+$('btnTest').onclick=()=>{
+ if(S.busy)return;S.run++;cancelPreparation();stopAudio();S.playing=false;
+ if(S.material){say('s warn','Topic-mode assessments are not implemented.');return;}
+ if(!assessmentMatches(assessment)){
+  invalidateAssessment();
+  assessment={...newAssessmentRun(S.chunks),source:S.source,language:lang(),mode:$('materialMode').value,chunks:JSON.stringify(S.chunks),generation:0,active:true,roots:[],operation:null,hearing:false};
+  showSectionPicker(assessment);
+ }else refreshPicker(assessment);
+ setControls();
+};
+function showSectionPicker(run){
+ const box=document.createElement('div');box.className='msg t';box.dataset.assessment='picker';const label=document.createElement('p');box.append(label);run.pickerLabel=label;run.pickerButtons=[];run.roots.push(box);
+ for(const section of run.sections){const btn=document.createElement('button');btn.onclick=()=>startSectionAssessment(run,section);run.pickerButtons.push(btn);box.append(btn);}
+ $('log').append(box);refreshPicker(run);$('log').scrollTop=1e9;
+}
+function beginAssessmentOperation(run){
+ run.controller?.abort();run.controller=new AbortController();run.generation++;
+ for(const root of run.roots)if(root!==run.pickerLabel.parentElement)disableAssessmentControls(root);
+ run.operation={generation:run.generation,controller:run.controller};S.busy=true;refreshPicker(run);setControls();return run.operation;
+}
+function endAssessmentOperation(run,op){
+ if(run!==assessment||run.operation!==op)return;
+ run.operation=null;S.busy=false;S.playing=false;refreshPicker(run);setControls();
+}
+async function startSectionAssessment(run,section){
+ if(S.busy||run?.hearing||!assessmentMatches(run,section))return;
+ const op=beginAssessmentOperation(run);status('Preparing section test…');
+ try{
+  const test=await prepareSectionTest(section,run.language,chat,{signal:op.controller.signal});
+  if(!assessmentMatches(run,section,op.generation)||op.controller.signal.aborted)return;
+  const box=document.createElement('div');box.className='msg t';box.dataset.assessment='questions';run.roots.push(box);const title=document.createElement('b');title.textContent=`Section ${section.index+1} test (not whole-unit)`;box.append(title);const answers=[];
+  for(const [i,q]of test.questions.entries()){
+   const w=document.createElement('div');w.className='q';const label=document.createElement('div');label.textContent=`Q${i+1}. ${q.q}`;const answer=document.createElement('textarea');answer.maxLength=3000;answers.push(answer);
+   const hear=document.createElement('button');hear.textContent='Hear question';hear.onclick=()=>hearAssessmentQuestion(run,section,op.generation,q,hear);w.append(label,hear,answer);box.append(w);
+  }
+  const submit=document.createElement('button');submit.textContent='Submit section answers';box.append(submit);$('log').append(box);$('log').scrollTop=1e9;
+  submit.onclick=()=>gradeSection(run,section,op.generation,test.questions,answers,submit);status('Section test ready');
+ }catch(e){if(assessmentMatches(run,section,op.generation)&&!op.controller.signal.aborted){say('s warn','Section test stopped: '+e.message+' No automatic retry.');status('Stopped');}}
+ finally{endAssessmentOperation(run,op);}
+}
+async function hearAssessmentQuestion(run,section,generation,q,button){
+ if(S.busy||run.hearing||!assessmentMatches(run,section,generation))return;
+ run.hearing=true;button.disabled=true;refreshPicker(run);stopAudio();
+ try{await speakText(run.language==='english'?q.q:q.speak,()=>assessmentMatches(run,section,generation));}
+ catch(e){if(assessmentMatches(run,section,generation))say('s warn','Question audio stopped: '+e.message);}
+ finally{if(assessmentMatches(run,section,generation)){run.hearing=false;button.disabled=false;refreshPicker(run);}}
+}
+async function gradeSection(run,section,generation,questions,answers,button){
+ if(S.busy||run.hearing||!assessmentMatches(run,section,generation))return;
+ const student=answers.map(a=>a.value.trim()),op=beginAssessmentOperation(run);button.disabled=true;status('Checking section answers…');
+ try{
+  const grade=await prepareSectionGrade(section,questions,student,run.language,chat,{signal:op.controller.signal});
+  if(!assessmentMatches(run,section,op.generation)||op.controller.signal.aborted)return;
+  const total=grade.results.reduce((sum,r)=>sum+r.score,0),progress=recordSectionScore(run,section.index,grade.results);refreshPicker(run);
+  const out=document.createElement('div');out.className='msg t';const h=document.createElement('b');h.textContent=`Section ${section.index+1} score: ${total} / ${questions.length}`;out.append(h);
+  grade.results.forEach((r,i)=>{const row=document.createElement('div');row.className='res';row.textContent=`Q${i+1}: ${r.score} / 1. ${r.feedback}${r.remedial?'\nReview: '+r.remedial:''}`;out.append(row);});
+  const summary=document.createElement('p');summary.textContent=grade.summary+` Sections completed: ${progress.completed}/${progress.total}. `+(progress.wholeUnitComplete?'Every teaching section has now been assessed in this session.':'This is a partial-unit result, not a whole-unit score.');out.append(summary);$('log').append(out);$('log').scrollTop=1e9;button.textContent='Section submitted';
+  S.playing=true;setControls();
+  for(const r of grade.results){if(!assessmentMatches(run,section,op.generation))break;if(r.remedial){$('board').innerHTML='';$('boardTitle').textContent='Section review';addBoard(r.remedial);await speakText(run.language==='english'?r.remedial:r.remedialSpeak,()=>assessmentMatches(run,section,op.generation));}}
+  if(assessmentMatches(run,section,op.generation))status('Section assessment complete');
+ }catch(e){if(assessmentMatches(run,section,op.generation)&&!op.controller.signal.aborted){say('s warn','Section grading stopped: '+e.message+' No automatic retry.');status('Stopped');}}
+ finally{endAssessmentOperation(run,op);}
+}
+
 setControls();
 window.__app = { S, teacher };
 
@@ -393,8 +449,8 @@ requireLogin().then(async u => {
       const b = document.createElement('button'); b.className = 'msg s'; b.style.cursor = 'pointer';
       b.textContent = (l.finished ? '✔ ' : '▶ ') + (l.title || 'Untitled') + (l.finished ? ' (finished)' : ` (part ${l.chunkIndex + 1}, line ${l.sentIndex + 1})`);
       b.onclick = async () => {
-        if(S.playing || S.busy) return;
-        const f = await getLesson(l._id); cancelPreparation(); stopAudio(); S.run++;
+        invalidateAssessment();if(S.playing || S.busy) return;
+        const f = await getLesson(l._id); invalidateAssessment();cancelPreparation(); stopAudio(); S.run++;
         $('lang').value = f.lang || $('lang').value; $('lang').onchange?.(); $('src').value = f.source;
         let material;try{material=validateMaterial(f.source,f.material);}catch(e){say('s warn','Cannot resume: '+e.message);return;}
         let snapshot;try{snapshot=validateSnapshot(f.topicSnapshot,material,f.lang);validateTopicState(f,material,f.lang,snapshot);}catch(e){say('s warn','Saved topic response invalid: '+e.message);return;}
@@ -410,7 +466,7 @@ requireLogin().then(async u => {
     }
   } catch { /* offline or server waking: skip */ }
 });
-$('btnLogout').onclick = logout;
+$('btnLogout').onclick = ()=>{invalidateAssessment();logout();};
 
 function previewMaterial(){try{const m=materialMeta($('src').value,$('materialMode').value);$('materialPreview').textContent=m?'Generated teacher knowledge, not quoted notes. Check/edit the source if this outline is wrong:\n'+visibleUnitList(m):'Detailed notes: original source-grounded teaching and saved lesson format.';}catch(e){$('materialPreview').textContent=e.message;}}
-$('materialMode').addEventListener('change',()=>{if(lastPdfText&&[lastPdfText.notes,lastPdfText.topics].includes($('src').value))$('src').value=$('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics;previewMaterial();});$('src').addEventListener('input',previewMaterial);previewMaterial();
+$('materialMode').addEventListener('change',()=>{invalidateAssessment();if(lastPdfText&&[lastPdfText.notes,lastPdfText.topics].includes($('src').value))$('src').value=$('materialMode').value==='notes'?lastPdfText.notes:lastPdfText.topics;previewMaterial();});$('src').addEventListener('input',()=>{invalidateAssessment();previewMaterial();});previewMaterial();
