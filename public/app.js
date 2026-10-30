@@ -292,11 +292,14 @@ $('btnAsk').onclick = async () => {
   try {
     const cur = Math.min(S.idx, S.chunks.length - 1);
     const rk = S.ragKey === S.source.length + ':' + S.chunks.length ? S.rag : (S.ragKey = S.source.length + ':' + S.chunks.length, S.rag = buildIndex(S.chunks));
-    const hits = search(rk, q + ' ' + (topicOf(cur)?.title || ''), 4).filter(h => h.part !== cur).slice(0, 3);
+    const all = search(rk, q + ' ' + (topicOf(cur)?.title || ''), 5);
+    const hits = all.filter(h => h.part !== cur).slice(0, 3);
+    const noEvidence = all.length === 0;
     const parts = hits.map(h => ({ part: h.part + 1, text: S.chunks[h.part].slice(0, 1400) }));
-    if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
-    else say('s', 'Keyword search found no other matching part in the document; answering from the part being taught.');
-    const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1));
+    if (noEvidence) say('s', 'Keyword search found NO part of your document that matches this question, so the notes may not cover it. The answer below is marked as outside your notes.');
+    else if (hits.length) say('s', 'Looked through the whole document for this doubt: using part' + (hits.length > 1 ? 's ' : ' ') + hits.map(h => h.part + 1).join(', ') + ' plus the part being taught (keyword search, no AI).');
+    else say('s', 'Keyword search matched only the part being taught (part ' + (cur + 1) + '); no other part of the document matched.');
+    const d = await chatJSON(doubtPrompt(lang(), q, S.chunks[cur] || S.source, parts, cur + 1, noEvidence));
     const sents = (d.sentences || []).filter(s => s.text);
     $('board').innerHTML = ''; $('boardTitle').textContent = 'Doubt: ' + (d.title || q.slice(0, 40)); renderDiagram($('diagram'), d.diagram);
     S.playing = true; const tok = ++S.run; setControls();
