@@ -3,11 +3,21 @@ import { checkDerivedStep } from './derived-step.js';
 import { checkedMotionGraph } from './motion-graph.js';
 import { checkedReferences } from './evidence.js';
 // Structural checks only, not a proof of factual correctness or complete coverage.
+// Do not turn a descriptive loss trajectory into an invented arithmetic task.
+// This narrow exception is not a general numerical-problem classifier.
+export function calculationEvidenceSource(source) {
+  // Exempt only this recognized descriptive trajectory span, including its
+  // Example label. Decimal dots stay inside numbers. Never cross a newline or
+  // remove a trailing problem, even on the same line. All other examples keep
+  // the original conservative gate; this is not a general math classifier.
+  return String(source).replace(/\bExample:\s*Training ke dauran loss pehle \d+(?:\.\d+)? se \d+(?:\.\d+)?(?:, phir \d+(?:\.\d+)?)+ ho raha hai\./gi,'');
+}
 export function validateLesson(d, source) {
   const sentences = Array.isArray(d?.sentences) ? d.sentences.filter(s => s && typeof s.text === 'string' && s.text.trim()) : [];
   const words = sentences.map(s => s.text).join(' ').trim().split(/\s+/).length;
   if (sentences.length < 4 || words < 45) throw new Error('The AI returned an incomplete explanation. This part is not marked taught. Press Resume to prepare it again.');
-  if (/\d/.test(source) && /(?:example|calculate|calculation|numerical|metre|meter|squared|उदाहरण)/i.test(source) && !sentences.some(s => s.step?.math)) throw new Error('The AI skipped the worked calculation. This part is not marked taught. Press Resume to prepare it again.');
+  const calculationSource=calculationEvidenceSource(source);
+  if (/\d/.test(calculationSource) && /\b(?:example|calculate|calculation|numerical|metres?|meters?|squared)\b|उदाहरण/i.test(calculationSource) && !sentences.some(s => s.step?.math)) throw new Error('The AI skipped the worked calculation. This part is not marked taught. Press Resume to prepare it again.');
   for (const s of sentences) for (const field of ['text','speak']) if (typeof s[field] === 'string') s[field] = s[field].replace(/\*(?:waves?|nods?|points?|smiles?|gestures?)\*/gi, '').replace(/\[(?:waves?|nods?|points?|smiles?|gestures?)\]/gi, '').trim();
   d.sentences = sentences;
   return d;
