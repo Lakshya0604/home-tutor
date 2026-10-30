@@ -266,7 +266,7 @@ async function runLesson() {
         const s = d.sentences[S.sent];
         teacher.gesture(['explain', 'point', 'wave', 'think', 'nod'].includes(s.gesture) ? s.gesture : 'explain');
         if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(s.board, s.step); }
-        if ((S.sent === d.sentences.length - 1 || d.diagram?.explanation?.includes(S.sent) || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
+        if ((S.sent === d.sentences.length - 1 || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = s.speak && lang() === 'hinglish' ? s.speak : s.text;
         say('t', s.text);
         await speakText(tx);
