@@ -5,13 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Home Tutor - learn any unit with an animated teacher</title>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.0/lib/three-vrm.module.min.js"}}</script>
+<meta name="theme-color" content="#f5f7fb">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("hometutor.theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch{}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <div class="brand">🎓 Home Tutor <span class="tag">free · Hindi · English · Hinglish</span></div>
-  <div class="hdr-right">
-    <select id="avatar" title="Choose your teacher"><option value="ember">Teacher: Ember</option><option value="nova">Teacher: Nova</option><option value="kai">Teacher: Kai</option><option value="sky">Teacher: Sky</option></select>
+<header class="app-header">
+  <a class="brand" href="./" aria-label="Home Tutor home"><span class="brand-icon" aria-hidden="true">H<span>t</span></span><span>Home Tutor<small>Your personal learning space</small></span></a>
+  <div class="header-actions"><span class="workspace-pill"><span></span>Learning studio</span><button id="themeToggle" class="ghost theme-toggle" type="button" aria-label="Switch color theme">Dark theme</button><span id="who" class="note"></span><button id="btnLogout" class="ghost">Logout</button></div>
+</header>
+<div class="workspace-heading"><div><span class="eyebrow">YOUR CLASSROOM</span><h1>A little more clarity.<br class="mobile-break"> One lesson at a time.</h1><p>Bring your notes. Set your pace. Make room for questions.</p></div><div class="session-label"><span class="session-icon" aria-hidden="true">↗</span><span>Your pace. Your space.<small>Pause and ask whenever you need.</small></span></div></div>
+<details class="preferences"><summary><span><span aria-hidden="true">☷</span> Lesson preferences <small>Teacher, language & voice</small></span><span class="preferences-action">Customize <span aria-hidden="true">⌄</span></span></summary><div class="hdr-right">    <select id="avatar" title="Choose your teacher"><option value="ember">Teacher: Ember</option><option value="nova">Teacher: Nova</option><option value="kai">Teacher: Kai</option><option value="sky">Teacher: Sky</option></select>
     <select id="lang" title="Teaching language">
       <option value="hinglish">Hinglish</option>
       <option value="hindi" selected>हिंदी (Hindi)</option>
@@ -23,25 +27,24 @@
       <option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
     </select>
     <button id="btnSettings" class="ghost">AI settings</button>
-    <span id="who" class="note"></span><button id="btnLogout" class="ghost">Logout</button>
-  </div>
-</header>
+</div></details>
 <main>
-  <section id="stage">
-    <div id="teacherWrap">
+  <section id="stage" aria-label="Lesson classroom">
+    <div class="section-heading stage-heading"><span><span class="eyebrow">01 / LEARN</span><h2>Your classroom</h2></span><span class="quiet-tag">English board · Your chosen voice</span></div>
+    <div id="teacherWrap"><div class="teacher-label">YOUR TUTOR</div>
       <svg id="teacher" viewBox="0 0 300 340" aria-label="Animated teacher"></svg>
       <div id="teacher3d" hidden aria-label="Animated 3D teacher"></div>
       <div id="status" class="status">Idle</div>
       <div id="credit" class="note" hidden>Teacher model "Ember" by <a href="https://vtubeme.com/free-vrm-avatars/ember" target="_blank" rel="noopener">VTubeMe</a>, CC BY 4.0</div>
     </div>
     <div id="boardWrap">
-      <div class="board-title" id="boardTitle">Board</div>
+      <div class="board-title" id="boardTitle">Lesson board</div>
       <div id="prep" class="prep" hidden role="status" aria-live="polite"><span class="spin"></span><span class="dots"><i></i><i></i><i></i></span><span id="prepText"></span></div>
       <div id="board"></div>
       <div id="diagram"></div>
     </div>
   </section>
-  <section id="chat">
+  <section id="chat" aria-label="Lesson workspace"><div class="section-heading"><span><span class="eyebrow">02 / EXPLORE</span><h2>Make it your lesson</h2></span><span class="quiet-tag">Notes → Understanding</span></div>
     <div id="log"></div>
     <div id="controls">
       <button id="btnPause" disabled>Pause</button>
@@ -57,16 +60,16 @@
       <button id="btnAsk">Ask</button>
     </div>
     <div id="composer">
-      <label for="materialMode">Material type</label>
+      <div class="composer-heading"><h3>Add your study material</h3><span class="quiet-tag">Text or PDF</span></div><label for="materialMode">Material type</label>
       <select id="materialMode"><option value="notes">Detailed notes / original notes flow</option><option value="syllabus">Topics and subtopics / syllabus</option><option value="topic">Single topic (for example: What is LLM?)</option></select>
       <div class="note">Choose topic mode for headings only. Explanations are generated teacher knowledge; original numerical givens are kept. Hindi speech uses an English board.</div>
       <pre id="materialPreview" class="note" style="white-space:pre-wrap;max-height:180px;overflow:auto" aria-live="polite"></pre>
-      <textarea id="src" placeholder="Paste notes / unit text / syllabus here…  (or attach a PDF below)"></textarea>
+      <textarea aria-label="Study material" id="src" placeholder="Paste notes / unit text / syllabus here…  (or attach a PDF below)"></textarea>
       <div class="row">
-        <label class="file">PDF<input type="file" id="pdf" accept="application/pdf"></label>
-        <input id="videoUrl" placeholder="Video URL (needs its transcript - see note)">
+        <label class="file">↥ Attach PDF<input type="file" id="pdf" accept="application/pdf"></label>
+        <input aria-label="Video URL" id="videoUrl" placeholder="Video URL (needs its transcript - see note)">
         <button id="btnVideo" class="ghost">Use video</button>
-        <button id="btnStart" class="primary">Start lesson</button>
+        <button id="btnStart" class="primary">Start lesson <span aria-hidden="true">→</span></button>
       </div>
       <div class="note" id="srcInfo">Nothing loaded yet.</div>
     </div>
@@ -75,7 +78,7 @@
 
 <dialog id="authDlg">
   <form method="dialog">
-    <h3 id="authTitle">Login to Home Tutor</h3>
+    <div class="auth-mark" aria-hidden="true">Ht</div><span class="eyebrow">YOUR LEARNING SPACE</span><h3 id="authTitle">Login to Home Tutor</h3>
     <label id="authNameLbl" hidden>Name <input id="authName" hidden placeholder="Your name"></label>
     <label>Email <input id="authEmail" type="email" autocomplete="username"></label>
     <label>Password <input id="authPass" type="password" autocomplete="current-password" placeholder="min 8 characters"></label>
@@ -103,6 +106,7 @@
     <div class="row"><button value="ok" class="primary" id="saveSettings">Save</button><button value="cancel" class="ghost">Close</button></div>
   </form>
 </dialog>
+<script src="ui.js" defer></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
