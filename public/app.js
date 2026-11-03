@@ -84,7 +84,7 @@ function fillVoices() {
   if (!saved && nat) $('voice').value = nat.value;
 }
 $('voice').onchange = () => localStorage.setItem('aiteacher.voice.' + voiceGroup(lang()), $('voice').value);
-$('lang').onchange = () => { lessonSelection++;invalidateAssessment(); if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
+$('lang').onchange = () => { lessonSelection++;invalidateAssessment(); if(S.playing || S.pending) $('btnPause').click(); S.data=[]; S.prefetchError=null; if(S.started && !S.finished){S.sent=0;S.shown=new Set();$('board').innerHTML='';$('diagram').innerHTML='';status('Language changed - Resume restarts the current part in the selected language.');} fillVoices(); localStorage.setItem('aiteacher.lang', lang()); };
 speechSynthesis?.addEventListener?.('voiceschanged', fillVoices);
 { const saved=localStorage.getItem('aiteacher.lang'); $('lang').value=[...$('lang').options].some(o=>o.value===saved)?saved:'hindi'; }
 { const r = localStorage.getItem('aiteacher.rate'); if (r && [...$('rate').options].some(o => o.value === r)) $('rate').value = r; }
