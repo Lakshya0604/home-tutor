@@ -1,3 +1,4 @@
+import {noteBoardText} from './note-board.js';
 import {createProgressQueue} from './progress-queue.js';
 import {pdfTopicLines} from './pdf-lines.js';
 import {validateSnapshot,validateTopicState,TOPIC_PROMPT_VERSION} from './topic-snapshot.js';
@@ -221,7 +222,7 @@ function loadChunk(i, signal) {
 }
 function showBoard(d, upTo) {
   $('board').innerHTML = ''; $('boardTitle').textContent = d.title || 'Board';
-  d.sentences.slice(0, upTo + 1).forEach((s, k) => { if ((s.board || s.step) && S.shown.has(k)) addBoard(s.board, s.step); });
+  d.sentences.slice(0, upTo + 1).forEach((s, k) => { if ((s.board || s.step) && S.shown.has(k)) addBoard(noteBoardText(s, !!S.material), s.step); });
   renderDiagram($('diagram'), S.shown.has('dia') ? d.diagram : null);
 }
 function addBoard(t, step, cls) {
@@ -263,7 +264,7 @@ async function runLesson() {
         if (token !== S.run) return;
         const s = d.sentences[S.sent];
         teacher.gesture(['explain', 'point', 'wave', 'think', 'nod'].includes(s.gesture) ? s.gesture : 'explain');
-        if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(s.board, s.step); }
+        if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(noteBoardText(s, !!S.material), s.step); }
         if ((S.sent === d.sentences.length - 1 || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = spokenSentence(s,lang());
         say('t', s.text);
