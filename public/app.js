@@ -45,6 +45,9 @@ async function loadAvatar(id) {
 }
 { const sel = $('avatar'); let saved = 'ember'; try { saved = localStorage.getItem('hometutor.avatar') || 'ember'; } catch {} sel.value = AVATARS.some(x => x.id === saved) ? saved : 'ember'; sel.onchange = () => loadAvatar(sel.value); loadAvatar(sel.value); }
 const S = { chunks: [], data: [], idx: 0, sent: 0, run: 0, source: '', playing: false, started: false, titles: [], shown: new Set(), busy: false, testReady: false, qa: null };
+// Keep one visible transcript entry when an interrupted sentence is replayed.
+// Weak keys follow the cached sentence, and detached rows are recreated after log reset.
+const transcriptLines = new WeakMap();
 let lessonSelection=0;
 const lang = () => $('lang').value;
 const rate = () => parseFloat($('rate').value);
@@ -267,7 +270,7 @@ async function runLesson() {
         if (!S.shown.has(S.sent)) { S.shown.add(S.sent); if (s.board || s.step) addBoard(noteBoardText(s, !!S.material), s.step); }
         if ((S.sent === d.sentences.length - 1 || /table|diagram|map|chart|graph|axis|axes|तालिका|नक्शा|ग्राफ/i.test(s.text)) && d.diagram && !S.shown.has('dia')) { S.shown.add('dia'); renderDiagram($('diagram'), d.diagram); }
         const tx = spokenSentence(s,lang());
-        say('t', s.text);
+        if (!transcriptLines.get(s)?.isConnected) transcriptLines.set(s, say('t', s.text));
         // Queue only the next source range once playback of this prepared part begins.
         await speakText(tx);
         // A successful first spoken line establishes playback before bounded prefetch.

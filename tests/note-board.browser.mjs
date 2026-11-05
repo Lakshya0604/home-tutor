@@ -13,6 +13,22 @@ assert.equal(await page.locator('#board').innerText(),board);
 assert.equal(await page.evaluate(()=>JSON.stringify(window.__app.S.data[0])),rawBefore);
 assert.deepEqual(await page.evaluate(()=>({idx:window.__app.S.idx,sent:window.__app.S.sent})),cursor);
 await page.locator('#btnPause').click();
+// Replaying interrupted audio must not append the same teaching line again.
+assert.equal(await page.locator('#log .msg.t').count(),3);
+assert.deepEqual(await page.locator('#log .msg.t').allTextContents(),state.sentences.map(s=>s.text));
+await page.locator('#btnResume').click();
+await page.waitForFunction(()=>window.testSpoken.length===5);
+await page.locator('#btnPause').click();
+assert.equal(await page.locator('#log .msg.t').count(),3);
 await page.setViewportSize({width:390,height:844});assert.equal(await page.locator('#board').innerText(),board);
 if(process.env.SCREENSHOT_DIR){await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'resumed-note-board-mobile.png'),fullPage:true});await page.setViewportSize({width:1200,height:900});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'resumed-note-board-desktop.png'),fullPage:true});}
-console.log(JSON.stringify({board,rawUnchanged:true,resumeRebuild:true,sameCursor:true,actualProviderCalls:0,actualAudio:false,productionWrites:0}));}finally{await b?.close();server.close()}
+// A new lesson clears prior rows and must create its own first line.
+await page.locator('#btnStart').click();
+await page.waitForFunction(()=>window.testSpoken.length===6);
+assert.equal(await page.locator('#log .msg.t').count(),1);
+await page.locator('#btnPause').click();
+await page.locator('#btnResume').click();
+await page.waitForFunction(()=>window.testSpoken.length===7);
+await page.locator('#btnPause').click();
+assert.equal(await page.locator('#log .msg.t').count(),1);
+console.log(JSON.stringify({board,rawUnchanged:true,resumeRebuild:true,sameCursor:true,transcriptUnique:true,actualProviderCalls:0,actualAudio:false,productionWrites:0}));}finally{await b?.close();server.close()}
