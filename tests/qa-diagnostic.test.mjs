@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {prepareLesson} from '../public/teaching-language.js';
+const attempt=()=>prepareLesson({language:'hindi',source:'Synthetic source.',chat:async()=>'{invalid synthetic JSON',options:{}});
+test('normal lesson URLs do not retain raw model diagnostics',async()=>{globalThis.location={search:''};delete globalThis.__homeTutorQADiagnostic;await assert.rejects(attempt,/invalid strict JSON/);assert.equal(globalThis.__homeTutorQADiagnostic,undefined);delete globalThis.location;});
+test('explicit synthetic QA mode retains response but keeps strict rejection',async()=>{globalThis.location={search:'?qa=1'};await assert.rejects(attempt,/invalid strict JSON/);assert.equal(globalThis.__homeTutorQADiagnostic.task,'lesson');assert.equal(globalThis.__homeTutorQADiagnostic.raw,'{invalid synthetic JSON');assert.ok(Object.isFrozen(globalThis.__homeTutorQADiagnostic));delete globalThis.location;delete globalThis.__homeTutorQADiagnostic;});
