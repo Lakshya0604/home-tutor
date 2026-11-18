@@ -26,6 +26,8 @@ export function notesDisplayPunctuation(original) {
 async function bilingualResponse(task,messages,chat,options) {
  const schema=bilingualSchema(task);
  const raw=await chat([{...messages[0],content:messages[0].content+'\nEXACT JSON SCHEMA (all fields required, no unknown fields):\n'+JSON.stringify(schema)},...messages.slice(1)],options);
+ // Opt-in diagnostics for synthetic QA only. Nothing is uploaded, persisted, or enabled on normal lesson URLs.
+ if(typeof location!=='undefined' && new URLSearchParams(location.search).get('qa')==='1')globalThis.__homeTutorQADiagnostic=Object.freeze({task,raw});
  let answer;try{answer=JSON.parse(raw);}catch{throw new Error('AI returned invalid strict JSON; not taught.');}
  assertSchema(answer,schema);const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
 }
