@@ -35,6 +35,11 @@ async function bilingualResponse(task,messages,chat,options) {
    if(lines.filter(s=>s.teachingRole==='explanation').length<2)throw new Error('The lesson omitted distinct explanations; not taught.');
    const last=lines.at(-1);
    if(last.teachingRole!=='check'||!/[?？]/.test(last.text)||!/[?？]/.test(last.speak))throw new Error('The lesson omitted its final understanding question; not taught.');
+   // Narrow deterministic check: a review question cannot invent numerical givens.
+   // This does not verify that its topic or every explanation is source-supported.
+   const numbers=s=>[...s.replace(/(?<=\d),(?=\d{3}\b)/g,'').matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
+   const supplied=new Set(numbers(messages.at(-1).content));
+   if(numbers(last.text+' '+last.speak).some(n=>!supplied.has(n)))throw new Error('The understanding question invented numerical inputs; not taught.');
    const compact=s=>s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
    const source=compact(messages.at(-1).content);
    if(lines.filter(s=>s.teachingRole==='explanation').some(s=>source.includes(compact(s.text))))throw new Error('The lesson copied a source line instead of explaining it; not taught.');
