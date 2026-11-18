@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {bilingualSchema} from '../public/schema.js';
+import {assertSchema} from '../public/schema-check.js';
+import {validateCoverage} from '../public/lesson-quality.js';
+const sentence={text:'This clear sentence explains the source idea carefully while preserving its conditions.',speak:'यह बात आसान तरीके से समझते हैं।',board:'',step:null,gesture:'explain'};
+const answer=n=>({title:'Source lesson',sentences:Array.from({length:n},()=>({...sentence})),diagram:null});
+test('bilingual lesson schema advertises and enforces minimum sentence count',()=>{const schema=bilingualSchema('lesson');assert.equal(schema.properties.sentences.minItems,4);assert.throws(()=>assertSchema(answer(3),schema),/Too few/);assert.doesNotThrow(()=>assertSchema(answer(4),schema));});
+test('doubt retains concise reply contract',()=>{const schema=bilingualSchema('doubt');assert.equal(schema.properties.sentences.minItems,undefined);assert.doesNotThrow(()=>assertSchema({...answer(1),sentences:[{...sentence,evidence:[]}]},schema));});
+test('short explanations remain rejected rather than lowering teaching bar',()=>{const a=answer(4);a.sentences.forEach(s=>s.text='Too brief.');assert.throws(()=>validateCoverage(a,'Resistance opposes current.'),/incomplete explanation/);});
+test('array maxItems applies only when supplied',()=>{assert.throws(()=>assertSchema([1,2],{type:'array',maxItems:1,items:{type:'number'}}),/Too many/);assert.doesNotThrow(()=>assertSchema([1,2],{type:'array',items:{type:'number'}}));});
