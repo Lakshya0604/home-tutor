@@ -16,7 +16,7 @@ export function assertSchema(value,schema,path='$') {
   }
   return;
  }
- if(schema.type==='array') {if(!Array.isArray(value))throw new Error('Expected array at '+path);value.forEach((x,i)=>assertSchema(x,schema.items,path+'['+i+']'));return;}
+ if(schema.type==='array') {if(!Array.isArray(value))throw new Error('Expected array at '+path);if(Number.isInteger(schema.minItems)&&value.length<schema.minItems)throw new Error('Too few items at '+path);if(Number.isInteger(schema.maxItems)&&value.length>schema.maxItems)throw new Error('Too many items at '+path);value.forEach((x,i)=>assertSchema(x,schema.items,path+'['+i+']'));return;}
  if(schema.type==='integer') {if(!Number.isInteger(value))throw new Error('Expected integer at '+path);return;}
  if(schema.type==='number') {if(typeof value!=='number'||!Number.isFinite(value))throw new Error('Expected finite number at '+path);return;}
  if(schema.type==='string'&&typeof value!=='string')throw new Error('Expected string at '+path);
