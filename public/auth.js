@@ -19,14 +19,14 @@ export function requireLogin() {
   return new Promise(resolve => {
     if (token() && user()) return resolve(user());
     const dlg = document.getElementById('authDlg'), $ = id => document.getElementById(id); let mode = 'login';
-    const sync = () => { $('authNameLbl').hidden = mode === 'login'; $('authName').hidden = mode === 'login'; $('authTitle').textContent = mode === 'login' ? 'Login to Home Tutor' : 'Create your Home Tutor account'; $('authGo').textContent = mode === 'login' ? 'Login' : 'Register'; $('authSwitch').textContent = mode === 'login' ? 'New here? Create account' : 'Have an account? Login'; $('authErr').textContent = ''; };
-    $('authSwitch').onclick = e => { e.preventDefault(); mode = mode === 'login' ? 'register' : 'login'; sync(); };
+    const sync = () => { $('authNameLbl').hidden = mode === 'login'; $('authName').hidden = mode === 'login'; $('authTitle').textContent = mode === 'login' ? 'Login to Home Tutor' : 'Create your Home Tutor account'; $('authGo').textContent = mode === 'login' ? 'Login' : 'Register'; $('authSwitch').textContent = mode === 'login' ? 'New here? Create account' : 'Have an account? Login'; };
+    $('authSwitch').onclick = e => { e.preventDefault(); mode = mode === 'login' ? 'register' : 'login'; $('authErr').textContent = ''; sync(); };
     $('authGo').onclick = async e => {
       e.preventDefault(); $('authErr').textContent = ''; $('authGo').disabled = true; $('authGo').textContent = 'Please wait…';
       try { const u = mode === 'login' ? await login($('authEmail').value.trim(), $('authPass').value) : await register($('authName').value.trim(), $('authEmail').value.trim(), $('authPass').value); dlg.close(); resolve(u); }
       catch (err) { $('authErr').textContent = err.message; } finally { $('authGo').disabled = false; sync(); }
     };
     dlg.addEventListener('cancel', ev => ev.preventDefault());
-    sync(); dlg.showModal();
+    $('authErr').textContent = ''; sync(); dlg.showModal();
   });
 }
