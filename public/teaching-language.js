@@ -29,7 +29,17 @@ async function bilingualResponse(task,messages,chat,options) {
  // Opt-in diagnostics for synthetic QA only. Nothing is uploaded, persisted, or enabled on normal lesson URLs.
  if(typeof location!=='undefined' && new URLSearchParams(location.search).get('qa')==='1')globalThis.__homeTutorQADiagnostic=Object.freeze({task,raw});
  let answer;try{answer=JSON.parse(raw);}catch{throw new Error('AI returned invalid strict JSON; not taught.');}
- assertSchema(answer,schema);const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
+ assertSchema(answer,schema);
+ if(task==='lesson'){
+   const lines=answer.sentences;
+   if(lines.filter(s=>s.teachingRole==='explanation').length<2)throw new Error('The lesson omitted distinct explanations; not taught.');
+   const last=lines.at(-1);
+   if(last.teachingRole!=='check'||!/[?？]/.test(last.text)||!/[?？]/.test(last.speak))throw new Error('The lesson omitted its final understanding question; not taught.');
+   const compact=s=>s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+   const source=compact(messages.at(-1).content);
+   if(lines.filter(s=>s.teachingRole==='explanation').some(s=>source.includes(compact(s.text))))throw new Error('The lesson copied a source line instead of explaining it; not taught.');
+ }
+ const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
 }
 export async function prepareLesson({language,source,previousTitles,topic,plan,chat,chatJSON,options}) {
  const raw=hindiSpeechMode(language)?await bilingualResponse('lesson',lessonMessages({source,previousTitles,section:topic,headingMap:plan}),chat,options):await chatJSON(lessonPrompt(language,source,previousTitles,topic,plan),options);
