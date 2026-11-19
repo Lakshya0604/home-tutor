@@ -42,7 +42,10 @@ async function bilingualResponse(task,messages,chat,options) {
    if(numbers(last.text+' '+last.speak).some(n=>!supplied.has(n)))throw new Error('The understanding question invented numerical inputs; not taught.');
    const compact=s=>s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
    const source=compact(messages.at(-1).content);
-   if(lines.filter(s=>s.teachingRole==='explanation').some(s=>source.includes(compact(s.text))))throw new Error('The lesson copied a source line instead of explaining it; not taught.');
+   // The teaching bar: at least two labeled explanations must genuinely unpack
+   // (not repeat) the source. A stray verbatim sentence mislabeled explanation
+   // is tolerated; a paraphrase-only lesson is not.
+   if(lines.filter(s=>s.teachingRole==='explanation'&&!source.includes(compact(s.text))).length<2)throw new Error('The lesson repeated source lines instead of explaining them; not taught.');
    // Narrow deterministic check: a review question must stay on source concepts.
    // Lexical stem overlap against the source only; this does not prove the
    // question is answerable, fairly phrased, or semantically supported.
