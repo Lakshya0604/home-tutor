@@ -43,6 +43,12 @@ async function bilingualResponse(task,messages,chat,options) {
    const compact=s=>s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
    const source=compact(messages.at(-1).content);
    if(lines.filter(s=>s.teachingRole==='explanation').some(s=>source.includes(compact(s.text))))throw new Error('The lesson copied a source line instead of explaining it; not taught.');
+   // Narrow deterministic check: a review question must stay on source concepts.
+   // Lexical stem overlap against the source only; this does not prove the
+   // question is answerable, fairly phrased, or semantically supported.
+   const framing=new Set(['steadily','suddenly','observed','observes','happens','happened','suggest','suggests','consider','considers','suppose','supposing','imagine','imagines','someone','something','anything','correctly','probably','possibly','question','answering','following','meaning','understand','explains','describe','describes','remember','notice','notices']);
+   const novel=[...new Set((last.text.toLowerCase().match(/[a-z]{8,}/g)||[]).filter(w=>!framing.has(w)&&!source.includes(w)&&!source.includes(w.slice(0,6))))];
+   if(novel.length>=2||novel.some(w=>w.length>=11))throw new Error('The understanding question left the source concepts; not taught.');
  }
  const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
 }
