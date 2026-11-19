@@ -27,6 +27,10 @@ export function sourceUnits(source) {
 }
 export function validateCoverage(d, source) {
   validateLesson(d, source);
+  // Individual sentences may deliberately omit board notes, but a whole lesson
+  // must put something on the board or show a diagram. An empty board is a
+  // defect, not a style choice.
+  if (!d.diagram && !d.sentences.some(s => (typeof s.board === 'string' && s.board.trim()) || s.step?.math)) throw new Error('The lesson left the board completely empty. This part is not marked taught. Press Resume to prepare it again.');
   // Transparent content checks, not a claim of complete semantic coverage.
   const normalized = x => String(x).replace(/\s+/g, '').replace(/[×·]/g,'*').toLowerCase();
   const teaching = normalized(d.sentences.map(s=>[s.text,s.board,s.step?.math].join(' ')).join(' '));
