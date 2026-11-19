@@ -21,7 +21,8 @@ const base=()=>({title:'Survey concepts',sentences:[{...idea('A sample is a sele
 const attempt=a=>prepareLesson({language:'hindi',source,chat:async()=>JSON.stringify(a),options:{}});
 test('complete labeled teaching shape remains subject to existing validators',async()=>{await assert.doesNotReject(attempt(base()));});
 test('two explanation labels cannot replace a final question',async()=>{const a=base();a.sentences.at(-1).text='This concludes the lesson.';await assert.rejects(attempt(a),/final understanding/);});
-test('source copies cannot pass as distinct explanations',async()=>{const a=base();a.sentences[1].text='A sample is a selected group within a population.';await assert.rejects(attempt(a),/copied a source line/);});
+test('paraphrase-only lessons remain rejected',async()=>{const a=base();a.sentences[1].text='A sample is a selected group within a population.';await assert.rejects(attempt(a),/repeated source lines/);});
+test('a stray verbatim sentence mislabeled as explanation is tolerated when two real explanations exist',async()=>{const a=base();a.sentences.splice(4,0,{...idea('A large sample alone does not guarantee representation.','explanation')});await assert.doesNotReject(attempt(a));});
 test('too few explanation labels stop the lesson',async()=>{const a=base();a.sentences[1].teachingRole='source_idea';await assert.rejects(attempt(a),/distinct explanations/);});
 
 test('review question cannot introduce new numerical givens',async()=>{const a=base();a.sentences.at(-1).text='Would 1,000 answers guarantee representation?';await assert.rejects(attempt(a),/invented numerical inputs/);});
