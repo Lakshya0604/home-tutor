@@ -50,8 +50,10 @@ async function bilingualResponse(task,messages,chat,options) {
    // Lexical stem overlap against the source only; this does not prove the
    // question is answerable, fairly phrased, or semantically supported.
    const framing=new Set(['steadily','suddenly','observed','observes','happens','happened','suggest','suggests','consider','considers','suppose','supposing','imagine','imagines','someone','something','anything','correctly','probably','possibly','question','answering','following','meaning','understand','explains','describe','describes','remember','notice','notices']);
-   const novel=[...new Set((last.text.toLowerCase().match(/[a-z]{8,}/g)||[]).filter(w=>!framing.has(w)&&!source.includes(w)&&!source.includes(w.slice(0,6))))];
-   if(novel.length>=2||novel.some(w=>w.length>=11))throw new Error('The understanding question left the source concepts; not taught.');
+   const isNovel=w=>!framing.has(w)&&!source.includes(w)&&!source.includes(w.slice(0,6));
+   const words8=(last.text.toLowerCase().match(/[a-z]{8,}/g)||[]).filter(isNovel);
+   const words7=(last.text.toLowerCase().match(/[a-z]{7,}/g)||[]).filter(isNovel);
+   if(words8.length>=2||words8.some(w=>w.length>=11)||words7.length>=2)throw new Error('The understanding question left the source concepts; not taught.');
  }
  const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
 }
