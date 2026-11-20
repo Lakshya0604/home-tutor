@@ -51,9 +51,10 @@ async function bilingualResponse(task,messages,chat,options) {
    // question is answerable, fairly phrased, or semantically supported.
    const framing=new Set(['steadily','suddenly','observed','observes','happens','happened','suggest','suggests','consider','considers','suppose','supposing','imagine','imagines','someone','something','anything','correctly','probably','possibly','question','answering','following','meaning','understand','explains','describe','describes','remember','notice','notices','necessarily','definitely','certainly','exactly','precisely']);
    const isNovel=w=>!framing.has(w)&&!source.includes(w)&&!source.includes(w.slice(0,6));
-   const words8=(last.text.toLowerCase().match(/[a-z]{8,}/g)||[]).filter(isNovel);
+   // Two or more novel content words reject; a single novel word is often a
+   // legitimate modal probe (necessarily, automatically) of a source condition.
    const words7=(last.text.toLowerCase().match(/[a-z]{7,}/g)||[]).filter(isNovel);
-   if(words8.length>=2||words8.some(w=>w.length>=11)||words7.length>=2)throw new Error('The understanding question left the source concepts; not taught.');
+   if(words7.length>=2)throw new Error('The understanding question left the source concepts; not taught.');
  }
  const display=task==='lesson'?notesDisplayPunctuation(answer):answer;englishBoardHindiSpeech(display);return display;
 }
