@@ -49,7 +49,7 @@ async function bilingualResponse(task,messages,chat,options) {
    // Narrow deterministic check: a review question must stay on source concepts.
    // Lexical stem overlap against the source only; this does not prove the
    // question is answerable, fairly phrased, or semantically supported.
-   const framing=new Set(['steadily','suddenly','observed','observes','happens','happened','suggest','suggests','consider','considers','suppose','supposing','imagine','imagines','someone','something','anything','correctly','probably','possibly','question','answering','following','meaning','understand','explains','describe','describes','remember','notice','notices']);
+   const framing=new Set(['steadily','suddenly','observed','observes','happens','happened','suggest','suggests','consider','considers','suppose','supposing','imagine','imagines','someone','something','anything','correctly','probably','possibly','question','answering','following','meaning','understand','explains','describe','describes','remember','notice','notices','necessarily','definitely','certainly','exactly','precisely']);
    const isNovel=w=>!framing.has(w)&&!source.includes(w)&&!source.includes(w.slice(0,6));
    const words8=(last.text.toLowerCase().match(/[a-z]{8,}/g)||[]).filter(isNovel);
    const words7=(last.text.toLowerCase().match(/[a-z]{7,}/g)||[]).filter(isNovel);
